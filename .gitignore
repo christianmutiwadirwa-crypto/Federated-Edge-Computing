@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# ESP32 specific
+.pio/
+.vscode/
+
+# Ignore test results/datasets generated locally
+rpi/experiments/results/
+rpi/src/EdgeNode/cyber/*.csv
+rpi/src/EdgeNode/physical/*.csv
+rpi/src/EdgeNode/logs/*.log
+rpi/src/EdgeNode/state/*.txt
