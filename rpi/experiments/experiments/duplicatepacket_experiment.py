@@ -6,8 +6,33 @@
 """
 
 from core.base_experiment import BaseExperiment
+import socket
+import time
+import struct
 
+_PACKET_FMT = "<HBBIQfffffffffffffffffffffffffff"
 
+def _crc16_ccitt(data: bytes) -> int:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = (crc << 1) ^ 0x1021
+            else:
+                crc <<= 1
+            crc &= 0xFFFF
+    return crc
+
+def _build_duplicate_packet(seq: int, node_id: int = 1) -> bytes:
+    """Build a structurally valid 126-byte packet to be replayed as a duplicate."""
+    body = struct.pack(
+        _PACKET_FMT,
+        0xABCD, 1, node_id, seq, 0,
+        *([0.0] * 27),
+    )
+    crc = _crc16_ccitt(body)
+    return body + struct.pack("<H", crc)
 class DuplicatePacketExperiment(BaseExperiment):
     """
     Evaluates the duplicate packet detection capabilities of the cyber intrusion
@@ -32,43 +57,54 @@ class DuplicatePacketExperiment(BaseExperiment):
     """
 
     def initialize(self) -> None:
-        """
-        Load configuration and prepare the duplicate packet injection mechanism.
-
-        TODO (future implementation):
-            - Read target Edge Node IP and port from self.experiment_config.
-            - Read the configured duplicate injection rate from config.
-            - Read the duplication strategy: immediate re-send vs delayed re-send.
-            - Capture or load a set of legitimate packet payloads to use as
-              the source for duplicated transmissions.
-            - Initialise sequence tracking to ensure the duplicated packets
-              carry the same sequence number as the original.
-        """
+        cfg = self.config.get("duplicate", {})
+        self.interval = cfg.get("interval_ms", 100) / 1000.0
+        self.target_ip = self.config.get("server_ip", "127.0.0.1")
+        self.target_port = self.config.get("server_port", 9000)
+        self.sent_count = 0
+        self.sock = None
+        
+        # Pre-build the duplicate packet once with a fixed seq_num.
+        # Sending the same seq_num repeatedly triggers is_duplicate=True
+        # in ConnectionStateManager.compute_packet_metrics().
+        node_id = cfg.get("fake_node_id", 1)
+        self.packet = _build_duplicate_packet(seq=4000, node_id=node_id)
+        
         self._log_initialized()
 
     def run(self) -> None:
-        """
-        Execute the duplicate packet experiment for the configured attack_duration.
-
-        TODO (future implementation):
-            - Observe the baseline for pre_attack_duration seconds.
-            - Open a TCP socket to the target Edge Node.
-            - For each packet transmitted, optionally retransmit the same payload
-              a second time with the same sequence number according to the
-              configured duplicate rate.
-            - Maintain the duplicate injection pattern for the full attack_duration.
-            - Observe post-attack baseline for post_attack_duration seconds.
-        """
         self._log_started()
+        
+        pre_attack = self.experiment_config.get("pre_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing pre-attack baseline for {pre_attack}s...")
+        time.sleep(pre_attack)
+
+        attack_duration = self.experiment_config.get("attack_duration", 30.0)
+        self.logger.info(f"[{self.name}] Starting Duplicate Packet Attack against {self.target_ip}:{self.target_port}")
+        
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((self.target_ip, self.target_port))
+
+        start_time = time.time()
+        
+        while time.time() - start_time < attack_duration:
+            try:
+                self.sock.sendall(self.packet)
+                self.sent_count += 1
+            except Exception as e:
+                self.logger.warning(f"Failed to send: {e}")
+                break
+
+            time.sleep(self.interval)
+        
+        post_attack = self.experiment_config.get("post_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing post-attack baseline for {post_attack}s...")
+        time.sleep(post_attack)
+        
         self._log_completed()
 
     def cleanup(self) -> None:
-        """
-        Release all resources allocated during initialize().
-
-        TODO (future implementation):
-            - Close the TCP socket gracefully.
-            - Release the captured packet payload buffers from memory.
-            - Log the total number of unique vs duplicate packets transmitted.
-        """
+        if self.sock:
+            self.sock.close()
+        self.logger.info(f"[{self.name}] Duplicate Packet Attack complete. Sent: {self.sent_count}")
         self._log_cleaned_up()

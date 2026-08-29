@@ -41,6 +41,9 @@ from CyberCSVWriter import CyberCSVWriter
 from SlidingWindow import PacketEntry
 from Logger import Logger
 
+from AlertManager import AlertManager
+from InferenceEngine import InferenceEngine
+
 
 class DataManager:
     """Orchestrates packet validation, routing, and feature extraction."""
@@ -70,12 +73,29 @@ class DataManager:
         self.physical_writer = PhysicalCSVWriter(config_manager, self.physical_queue)
         self.cyber_writer    = CyberCSVWriter(config_manager, self.cyber_queue)
 
+        # --- Inference & Alerts (Phase 3) ---
+        self.inference_queue = queue.Queue(maxsize=q.get("inference_queue", 1000))
+        self.alert_manager = AlertManager()
+        self.inference_engine = InferenceEngine(
+            inference_queue=self.inference_queue,
+            alert_manager=self.alert_manager,
+            logger=self.logger,
+        )
+        self.inference_engine.start()
+
+        # Thread-safe storage for the most recent physical features per node
+        # We need this because the ML model requires both cyber + physical data
+        # to classify a window.
+        self.latest_physical = {}
+
         # --- WindowManager (replaces direct CyberFeatureExtractor calls) ---
         # Owns the CyberFeatureExtractor internally; produces windowed rows.
         self.window_manager = WindowManager(
             config_manager=config_manager,
             connection_manager=self.connection_manager,
             cyber_queue=self.cyber_queue,
+            inference_queue=self.inference_queue,
+            latest_physical=self.latest_physical,
             logger=logger,
         )
 
@@ -124,6 +144,22 @@ class DataManager:
                 "Validation queue full. Packet dropped.",
                 severity="ERROR",
             )
+
+    def notify_new_connection(self, node_id: int) -> None:
+        """
+        Called by PacketReceiver when the first valid packet of a NEW TCP
+        connection arrives from an already-known node_id.
+
+        This triggers ConnectionStateManager.record_connection() which:
+          - Increments pending_reconnections (counted in the next window flush)
+          - Resets sequence tracking for the fresh connection stream
+
+        Args:
+            node_id: The node_id extracted from the first packet payload.
+                     -1 if the node is unknown (pre-handshake) — ignored.
+        """
+        if node_id >= 0:
+            self.connection_manager.record_connection(node_id)
 
     # ------------------------------------------------------------------
     # Validation worker (Thread 2)
@@ -218,6 +254,38 @@ class DataManager:
             except queue.Full:
                 self.logger.log("Physical queue full. Physical row dropped.", severity="ERROR")
 
+            # Update the latest physical features for this node for inference
+            features = parsed.get("features", {})
+            self.latest_physical[node_id] = {
+                "Mean X": features.get("mean_x", 0),
+                "Mean Y": features.get("mean_y", 0),
+                "Mean Z": features.get("mean_z", 0),
+                "RMS X": features.get("rms_x", 0),
+                "RMS Y": features.get("rms_y", 0),
+                "RMS Z": features.get("rms_z", 0),
+                "Standard Deviation X": features.get("std_x", 0),
+                "Standard Deviation Y": features.get("std_y", 0),
+                "Standard Deviation Z": features.get("std_z", 0),
+                "Maximum X": features.get("max_x", 0),
+                "Maximum Y": features.get("max_y", 0),
+                "Maximum Z": features.get("max_z", 0),
+                "Minimum X": features.get("min_x", 0),
+                "Minimum Y": features.get("min_y", 0),
+                "Minimum Z": features.get("min_z", 0),
+                "Peak-to-Peak X": features.get("p2p_x", 0),
+                "Peak-to-Peak Y": features.get("p2p_y", 0),
+                "Peak-to-Peak Z": features.get("p2p_z", 0),
+                "Skewness X": features.get("skew_x", 0),
+                "Skewness Y": features.get("skew_y", 0),
+                "Skewness Z": features.get("skew_z", 0),
+                "Kurtosis X": features.get("kurt_x", 0),
+                "Kurtosis Y": features.get("kurt_y", 0),
+                "Kurtosis Z": features.get("kurt_z", 0),
+                "Crest Factor X": features.get("crf_x", 0),
+                "Crest Factor Y": features.get("crf_y", 0),
+                "Crest Factor Z": features.get("crf_z", 0),
+            }
+
             # Route to WindowManager (buffered, flushed every 2 s)
             self.window_manager.add_packet(entry)
 
@@ -287,3 +355,6 @@ class DataManager:
 
         self.physical_writer.stop()
         self.cyber_writer.stop()
+        
+        self.inference_engine.stop()
+        self.inference_engine.join()

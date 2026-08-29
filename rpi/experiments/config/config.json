@@ -1,5 +1,18 @@
 {
-    "experiment": "Replay",
+    "experiment": "Flooding",
+    "server_ip": "127.0.0.1",
+    "server_port": 9000,
+    "flood": {
+        "packets_per_second_min": 25,
+        "packets_per_second_max": 75,
+        "fake_node_id": 1
+    },
+    "replay": {
+        "capture_count": 5,
+        "replay_count": 2160,
+        "delay_before_replay": 30,
+        "replay_interval_ms": 500
+    },
     "schedule_delay_sec": 0,
     "results_dir": "results",
     "logging": {
@@ -10,73 +23,81 @@
     "experiments": {
         "ReplayExperiment": {
             "experiment_name": "ReplayExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 1800.0,
+            "post_attack_duration": 30.0,
             "description": "Replay previously captured application-layer packets."
         },
         "FloodingExperiment": {
             "experiment_name": "FloodingExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 3000.0,
+            "post_attack_duration": 30.0,
             "description": "High-rate packet flood to evaluate DoS detection."
         },
         "SlowDoSExperiment": {
             "experiment_name": "SlowDoSExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 120.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 3000.0,
+            "post_attack_duration": 30.0,
             "description": "Long-lived low-rate connection to emulate slow resource exhaustion."
         },
         "PacketInjectionExperiment": {
             "experiment_name": "PacketInjectionExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 1800.0,
+            "post_attack_duration": 30.0,
             "description": "Insert fabricated protocol packets to evaluate malformed packet detection."
         },
         "PacketLossExperiment": {
             "experiment_name": "PacketLossExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 3000.0,
+            "post_attack_duration": 30.0,
             "description": "Controlled packet dropping to emulate selective loss attacks."
         },
         "DuplicatePacketExperiment": {
             "experiment_name": "DuplicatePacketExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 3000.0,
+            "post_attack_duration": 30.0,
             "description": "Retransmit selected packets to evaluate duplicate detection."
         },
         "DelayExperiment": {
             "experiment_name": "DelayExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 3000.0,
+            "post_attack_duration": 30.0,
             "description": "Insert artificial transmission delays to emulate latency attacks."
         },
         "ConnectionResetExperiment": {
             "experiment_name": "ConnectionResetExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 1800.0,
+            "post_attack_duration": 30.0,
             "description": "Repeated TCP connection cycling to evaluate reset storm detection."
         },
         "DeviceSpoofExperiment": {
             "experiment_name": "DeviceSpoofExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 3000.0,
+            "post_attack_duration": 30.0,
             "description": "Impersonate a legitimate edge device through identity manipulation."
         },
         "DataTamperingExperiment": {
             "experiment_name": "DataTamperingExperiment",
-            "pre_attack_duration": 5.0,
-            "attack_duration": 60.0,
-            "post_attack_duration": 5.0,
+            "pre_attack_duration": 30.0,
+            "attack_duration": 1800.0,
+            "post_attack_duration": 30.0,
             "description": "Modify packet payloads before delivery to evaluate data integrity detection."
+        },
+        "NormalExperiment": {
+            "experiment_name": "NormalExperiment",
+            "pre_attack_duration": 30.0,
+            "attack_duration": 1800.0,
+            "post_attack_duration": 30.0,
+            "description": "Collect pristine baseline traffic with no cyber attacks."
         }
-    }
+    },
+    "node_id": "edge_node_1"
 }

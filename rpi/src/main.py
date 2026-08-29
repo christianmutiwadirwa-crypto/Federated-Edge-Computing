@@ -19,6 +19,7 @@ from ConfigManager import ConfigManager
 from Logger import Logger
 from DataManager import DataManager
 from TCPServer import TCPServer
+from WebDashboard import WebDashboard
 
 class EdgeNodeApp:
     def __init__(self):
@@ -35,12 +36,16 @@ class EdgeNodeApp:
         # Thread 1: TCP Server (which spawns PacketReceiver threads)
         self.tcp_server = TCPServer(self.config_manager, self.data_manager, self.logger)
         
+        # Thread 7: Web Dashboard (FastAPI)
+        self.web_dashboard = WebDashboard(self.config_manager, self.data_manager, self.logger)
+        
         # Handle graceful shutdown
         signal.signal(signal.SIGINT, self.graceful_shutdown)
         signal.signal(signal.SIGTERM, self.graceful_shutdown)
 
     def start(self):
         self.tcp_server.start()
+        self.web_dashboard.start()
         
         try:
             # Main thread just sleeps and keeps the process alive

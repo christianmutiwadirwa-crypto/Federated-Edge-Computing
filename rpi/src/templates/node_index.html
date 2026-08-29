@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge Node Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent-color: #10b981;
+            --alert-color: #ef4444;
+            --warning-color: #f59e0b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: var(--accent-color);
+            margin: 0 0 0.5rem 0;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #334155;
+        }
+
+        .card h2 {
+            font-size: 1rem;
+            color: #94a3b8;
+            margin: 0 0 1rem 0;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 0;
+            color: var(--accent-color);
+        }
+
+        .alert-item {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid var(--alert-color);
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .alert-item strong {
+            color: var(--alert-color);
+        }
+
+        .alert-time {
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Local Edge Node Monitor</h1>
+        <p>Node ID: <span id="node-id" style="font-weight:bold; color: white;">Loading...</span></p>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Status Card -->
+        <div class="card">
+            <h2>System Status</h2>
+            <p class="stat-value" id="status-val" style="color: var(--accent-color);">Online</p>
+            <p style="margin-top: 1rem; color: #94a3b8;">Monitoring local sensors & network traffic.</p>
+        </div>
+
+        <!-- Alerts Card -->
+        <div class="card" style="grid-column: span 2;">
+            <h2>Recent Security Alerts (Top 5)</h2>
+            <div id="alerts-container">
+                <p style="color: #94a3b8;">No alerts detected recently.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                document.getElementById('node-id').textContent = data.node_id;
+                
+                const container = document.getElementById('alerts-container');
+                if (data.recent_alerts && data.recent_alerts.length > 0) {
+                    container.innerHTML = '';
+                    data.recent_alerts.forEach(alert => {
+                        const div = document.createElement('div');
+                        div.className = 'alert-item';
+                        div.innerHTML = `
+                            <strong>${alert.attack_label}</strong> detected! 
+                            (Confidence: ${(alert.confidence * 100).toFixed(1)}%)<br>
+                            <span class="alert-time">Time: ${alert.alert_time}</span>
+                        `;
+                        container.appendChild(div);
+                    });
+                } else {
+                    container.innerHTML = '<p style="color: var(--accent-color);">System Secure. No recent alerts.</p>';
+                }
+                
+            } catch (error) {
+                console.error("Failed to fetch node status", error);
+                document.getElementById('status-val').textContent = 'Offline';
+                document.getElementById('status-val').style.color = 'var(--alert-color)';
+            }
+        }
+
+        fetchStatus();
+        setInterval(fetchStatus, 3000);
+    </script>
+</body>
+</html>

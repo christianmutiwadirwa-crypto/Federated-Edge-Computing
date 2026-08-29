@@ -34,6 +34,7 @@ class ExperimentManager:
         "ConnectionReset":  ("experiments.connectionreset_experiment",  "ConnectionResetExperiment"),
         "DeviceSpoof":      ("experiments.devicespoof_experiment",      "DeviceSpoofExperiment"),
         "DataTampering":    ("experiments.datatampering_experiment",    "DataTamperingExperiment"),
+        "Normal":           ("experiments.normal_experiment",           "NormalExperiment"),
     }
 
     def _load_experiment_module(self, experiment_name: str) -> BaseExperiment:
@@ -90,7 +91,10 @@ class ExperimentManager:
             time.sleep(delay_sec)
         
         try:
-            # 3. Initialization
+            # 3. Mark Dataset Start
+            self.dataset_sync.mark_start()
+            
+            # 4. Initialization
             self.logger.info(f"[{experiment_instance.name}] Initializing...")
             experiment_instance.initialize()
             

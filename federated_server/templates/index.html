@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Federated Server Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent-color: #38bdf8;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            color: var(--accent-color);
+            margin: 0 0 0.5rem 0;
+        }
+
+        .header p {
+            color: #94a3b8;
+            margin: 0;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid #334155;
+            transition: transform 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        .card h2 {
+            font-size: 1rem;
+            color: #94a3b8;
+            margin: 0 0 1rem 0;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-online { background-color: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
+        .status-offline { background-color: #ef4444; }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background-color: #334155;
+            border-radius: 4px;
+            margin-top: 1rem;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--accent-color);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .footer {
+            margin-top: 3rem;
+            color: #64748b;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Federated Aggregation Server</h1>
+        <p>Live Federated Learning (FedAvg) Monitoring</p>
+    </div>
+
+    <div class="dashboard-grid">
+        <!-- Server Status Card -->
+        <div class="card">
+            <h2>Server Status</h2>
+            <p class="stat-value" id="status-val">
+                <span class="status-dot status-offline" id="status-dot"></span>
+                <span id="status-text">Connecting...</span>
+            </p>
+        </div>
+
+        <!-- Current Round Card -->
+        <div class="card">
+            <h2>Current FL Round</h2>
+            <p class="stat-value" id="round-val" style="color: var(--accent-color);">0</p>
+        </div>
+
+        <!-- Pending Updates Card -->
+        <div class="card">
+            <h2>Pending Updates</h2>
+            <p class="stat-value"><span id="pending-val">0</span> / <span id="expected-val">?</span></p>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">Nodes ready for aggregation</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        Auto-refreshing every 3 seconds
+    </div>
+
+    <script>
+        async function fetchHealth() {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                
+                // Update Status
+                document.getElementById('status-text').textContent = 'Online';
+                document.getElementById('status-dot').className = 'status-dot status-online';
+                
+                // Update Round
+                document.getElementById('round-val').textContent = data.current_round;
+                
+                // Update Pending
+                document.getElementById('pending-val').textContent = data.pending_updates_count;
+                document.getElementById('expected-val').textContent = data.expected_clients;
+                
+                // Update Progress Bar
+                const progress = (data.pending_updates_count / data.expected_clients) * 100;
+                document.getElementById('progress-bar').style.width = `${progress}%`;
+                
+            } catch (error) {
+                console.error("Failed to fetch server status", error);
+                document.getElementById('status-text').textContent = 'Offline';
+                document.getElementById('status-dot').className = 'status-dot status-offline';
+            }
+        }
+
+        // Fetch immediately, then every 3 seconds
+        fetchHealth();
+        setInterval(fetchHealth, 3000);
+    </script>
+</body>
+</html>

@@ -62,6 +62,8 @@ class WindowManager:
         config_manager,
         connection_manager: ConnectionStateManager,
         cyber_queue: queue.Queue,
+        inference_queue: queue.Queue,
+        latest_physical: dict,
         logger: Logger,
     ):
         """
@@ -74,6 +76,8 @@ class WindowManager:
         self._window_duration: float   = config_manager.get("window_duration_sec", 2)
         self._connection_manager       = connection_manager
         self._cyber_queue              = cyber_queue
+        self._inference_queue          = inference_queue
+        self._latest_physical          = latest_physical
         self._logger                   = logger
 
         # One CyberFeatureExtractor instance (stateless — safe to share)
@@ -247,6 +251,18 @@ class WindowManager:
                 f"Cyber queue full. Window {window_id} (node={node_id}) dropped.",
                 severity="ERROR",
             )
+
+        # Build window dict for InferenceEngine and push to inference_queue
+        inference_window = {
+            "cyber": features,
+            "physical": self._latest_physical.get(node_id, None),
+            "window_timestamp": features.get("window_start_time"),
+            "node_id": node_id,
+        }
+        try:
+            self._inference_queue.put_nowait(inference_window)
+        except queue.Full:
+            pass # Inference queue is non-blocking drop-if-full to prevent memory leaks
 
     # ------------------------------------------------------------------
     # AttackLabel file-based IPC

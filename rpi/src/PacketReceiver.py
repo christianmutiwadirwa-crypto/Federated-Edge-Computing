@@ -7,6 +7,11 @@ from Logger import Logger
 
 class PacketReceiver:
     """Handles an individual TCP connection and receives packets."""
+
+    # Offset and size of the node_id field in the 126-byte packet layout:
+    #   Magic(2) + Version(1) → node_id is byte 3, 1 byte unsigned.
+    _NODE_ID_OFFSET = 3
+    _NODE_ID_SIZE   = 1
     
     def __init__(self, conn: socket.socket, addr: tuple, data_manager: DataManager, logger: Logger, server_ip: str, server_port: int):
         self.conn = conn
@@ -16,6 +21,7 @@ class PacketReceiver:
         self.running = True
         self.server_ip = server_ip
         self.server_port = server_port
+        self._first_packet = True  # Tracks whether this is the first packet on this TCP socket
         
         self.thread = threading.Thread(target=self._receive_loop, name=f"Receiver-{addr[0]}:{addr[1]}", daemon=True)
         self.thread.start()
@@ -43,6 +49,15 @@ class PacketReceiver:
                 while len(buf) >= packet_size:
                     raw_packet = bytes(buf[:packet_size])
                     del buf[:packet_size]
+
+                    # On the very first complete packet of this TCP socket,
+                    # notify the DataManager so it can record a reconnection
+                    # event for the node that just (re)connected.
+                    if self._first_packet:
+                        self._first_packet = False
+                        if len(raw_packet) > self._NODE_ID_OFFSET:
+                            node_id = raw_packet[self._NODE_ID_OFFSET]
+                            self.data_manager.notify_new_connection(node_id)
                     
                     # Offload to DataManager/Validation Queue immediately
                     # to ensure Reception Thread is never blocked

