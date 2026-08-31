@@ -98,15 +98,29 @@
         ===================================================== */
         .header {
             display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 1.5rem;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
             padding: 1.5rem 0 1.75rem;
             border-bottom: 1px solid var(--border);
             margin-bottom: 1.5rem;
+            text-align: center;
         }
 
-        .header-left {}
+        .header-center {}
+
+        .header-right {
+            position: absolute;
+            top: 1.5rem;
+            right: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+
+        /* make page position:relative so header-right is scoped */
+        .page { position: relative; }
 
         .header-badge {
             display: inline-flex;
@@ -151,6 +165,7 @@
             font-size: 0.85rem;
             display: flex;
             flex-wrap: wrap;
+            justify-content: center;
             gap: 0 1.25rem;
         }
 
@@ -162,12 +177,7 @@
 
         .header-meta-item svg { opacity: 0.5; flex-shrink: 0; }
 
-        .header-right {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 0.5rem;
-        }
+
 
         .live-pill {
             display: flex;
@@ -613,7 +623,7 @@
          HEADER
     ======================================================== -->
     <header class="header">
-        <div class="header-left">
+        <div class="header-center">
             <div class="header-badge">Federated Edge Computing · IIoT</div>
             <h1>FL Aggregation Server</h1>
             <div class="header-sub">
@@ -627,7 +637,7 @@
                 </span>
                 <span class="header-meta-item">
                     <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-                    Oracle Cloud · Render
+                    Render
                 </span>
             </div>
         </div>
@@ -656,7 +666,7 @@
                 <span id="stat-status-text" style="font-size:1.8rem;">—</span>
             </div>
             <div class="stat-label" id="stat-uptime">Starting up…</div>
-            <div class="stat-tag tag-muted" id="stat-deployment-tag">Oracle Cloud / Render</div>
+            <div class="stat-tag tag-muted" id="stat-deployment-tag">Render</div>
         </div>
 
         <!-- FL Round -->
