@@ -714,12 +714,12 @@
     </div><!-- /row 1 -->
 
     <!-- ========================================================
-         ROW 2: PENDING NODES | SYSTEM INFO | ARCH DIAGRAM
+         ROW 2: PENDING NODES
     ======================================================== -->
     <div class="grid-12" style="margin-bottom: 1rem;">
 
         <!-- Edge Nodes -->
-        <div class="card col-4">
+        <div class="card col-12">
             <div class="card-label">
                 <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
                 Edge Nodes · Current Round
@@ -729,83 +729,6 @@
                 <div class="empty-state" id="node-empty">
                     <span>📡</span>
                     Waiting for node updates…
-                </div>
-            </div>
-        </div>
-
-        <!-- System Architecture Diagram -->
-        <div class="card col-8">
-            <div class="card-label">
-                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"/><path d="M14 15v2M8 15v2M12 17h.01M5 20h14"/></svg>
-                System Architecture
-            </div>
-            <div class="arch-pipeline">
-                <div class="arch-node">
-                    <span class="arch-icon">📈</span>
-                    <div class="arch-label">ADXL345</div>
-                    <div class="arch-sub">500 Hz · SPI</div>
-                    <div class="arch-sub">3-axis vibration</div>
-                </div>
-                <div class="arch-node">
-                    <span class="arch-icon">🔌</span>
-                    <div class="arch-label">ESP32</div>
-                    <div class="arch-sub">FreeRTOS · 3 tasks</div>
-                    <div class="arch-sub">Binary TCP</div>
-                </div>
-                <div class="arch-node">
-                    <span class="arch-icon">🥧</span>
-                    <div class="arch-label">Raspberry Pi</div>
-                    <div class="arch-sub">Feature extraction</div>
-                    <div class="arch-sub">MLP + IsoForest</div>
-                </div>
-                <div class="arch-node highlighted">
-                    <span class="arch-icon">☁️</span>
-                    <div class="arch-label">FL Server</div>
-                    <div class="arch-sub">FedAvg · This node</div>
-                    <div class="arch-sub">FastAPI</div>
-                </div>
-                <div class="arch-node">
-                    <span class="arch-icon">🌐</span>
-                    <div class="arch-label">Global Model</div>
-                    <div class="arch-sub">Aggregated MLP</div>
-                    <div class="arch-sub">Pushed back</div>
-                </div>
-            </div>
-
-            <div style="margin-top: 1.25rem;">
-                <div class="spec-grid">
-                    <div class="spec-item">
-                        <div class="spec-key">Algorithm</div>
-                        <div class="spec-val">FedAvg (McMahan et al.)</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Aggregation Target</div>
-                        <div class="spec-val" id="spec-agg-target">2 nodes required</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Cyber Detector</div>
-                        <div class="spec-val">MLP Classifier · sklearn</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Physical Detector</div>
-                        <div class="spec-val">Isolation Forest</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Detection Classes</div>
-                        <div class="spec-val">11 (10 attacks + Normal)</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Sensor Window</div>
-                        <div class="spec-val">2.0 s · 1000 samples</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Node Protocol</div>
-                        <div class="spec-val">Binary TCP · magic=0xABCD</div>
-                    </div>
-                    <div class="spec-item">
-                        <div class="spec-key">Weight Format</div>
-                        <div class="spec-val">coefs[] + intercepts[]</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -986,7 +909,6 @@ function updateAll(data) {
     updateNodeList(data);
     updateRegistry(data);
     updateHistory(data);
-    updateSpecAggTarget(data);
 }
 
 function updateServerCard(data) {
