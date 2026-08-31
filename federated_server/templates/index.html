@@ -3,183 +3,1240 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Federated Server Dashboard</title>
+    <title>FL Aggregation Server — IIoT Predictive Maintenance</title>
+    <meta name="description" content="Live monitoring dashboard for the Federated Learning aggregation server coordinating ESP32/Raspberry Pi edge nodes in a predictive maintenance IIoT system.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        /* =====================================================
+           Design Tokens
+        ===================================================== */
         :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-color: #f8fafc;
-            --accent-color: #38bdf8;
-            --success-color: #10b981;
-            --warning-color: #f59e0b;
+            --bg:           #080c14;
+            --surface:      #0d1525;
+            --surface-2:    #111d30;
+            --border:       #1e2f4a;
+            --border-2:     #253a57;
+
+            --text:         #e2eaf5;
+            --text-muted:   #5c7a9b;
+            --text-dim:     #3a5170;
+
+            --accent:       #38bdf8;
+            --accent-dim:   rgba(56,189,248,0.12);
+            --accent-glow:  rgba(56,189,248,0.25);
+
+            --green:        #10b981;
+            --green-dim:    rgba(16,185,129,0.12);
+            --green-glow:   rgba(16,185,129,0.3);
+
+            --amber:        #f59e0b;
+            --amber-dim:    rgba(245,158,11,0.12);
+
+            --red:          #ef4444;
+            --red-dim:      rgba(239,68,68,0.12);
+            --red-glow:     rgba(239,68,68,0.3);
+
+            --purple:       #a78bfa;
+            --purple-dim:   rgba(167,139,250,0.12);
+
+            --mono: 'JetBrains Mono', monospace;
         }
+
+        /* =====================================================
+           Reset & Base
+        ===================================================== */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 2rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+            font-size: 14px;
+            /* Subtle grid background */
+            background-image:
+                linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
         }
 
+        /* =====================================================
+           Layout
+        ===================================================== */
+        .page {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 1.5rem 2rem 3rem;
+        }
+
+        .grid-12 {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1rem;
+        }
+
+        .col-3  { grid-column: span 3; }
+        .col-4  { grid-column: span 4; }
+        .col-6  { grid-column: span 6; }
+        .col-8  { grid-column: span 8; }
+        .col-9  { grid-column: span 9; }
+        .col-12 { grid-column: span 12; }
+
+        @media (max-width: 1100px) {
+            .col-3, .col-4 { grid-column: span 6; }
+            .col-8, .col-9 { grid-column: span 12; }
+        }
+        @media (max-width: 720px) {
+            .col-3, .col-4, .col-6 { grid-column: span 12; }
+            .page { padding: 1rem; }
+        }
+
+        /* =====================================================
+           Header
+        ===================================================== */
         .header {
-            text-align: center;
-            margin-bottom: 2rem;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1.5rem;
+            padding: 1.5rem 0 1.75rem;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+
+        .header-left {}
+
+        .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--accent);
+            background: var(--accent-dim);
+            border: 1px solid rgba(56,189,248,0.2);
+            padding: 0.2rem 0.6rem;
+            border-radius: 3px;
+            margin-bottom: 0.75rem;
+        }
+
+        .header-badge::before {
+            content: '';
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse-accent 2s infinite;
+        }
+
+        @keyframes pulse-accent {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
 
         .header h1 {
-            color: var(--accent-color);
-            margin: 0 0 0.5rem 0;
+            font-size: 1.65rem;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.2;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.4rem;
         }
 
-        .header p {
-            color: #94a3b8;
-            margin: 0;
+        .header-sub {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0 1.25rem;
         }
 
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            width: 100%;
-            max-width: 1000px;
+        .header-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
         }
 
+        .header-meta-item svg { opacity: 0.5; flex-shrink: 0; }
+
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.5rem;
+        }
+
+        .live-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid rgba(16,185,129,0.25);
+            background: var(--green-dim);
+            color: var(--green);
+            font-weight: 600;
+            font-size: 0.78rem;
+            letter-spacing: 0.06em;
+            transition: all 0.3s;
+        }
+
+        .live-pill.offline {
+            border-color: rgba(239,68,68,0.25);
+            background: var(--red-dim);
+            color: var(--red);
+        }
+
+        .live-pill .dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .refresh-timer {
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            font-family: var(--mono);
+        }
+
+        /* =====================================================
+           Cards
+        ===================================================== */
         .card {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            border: 1px solid #334155;
-            transition: transform 0.2s ease;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s;
         }
 
-        .card:hover {
-            transform: translateY(-2px);
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
         }
 
-        .card h2 {
-            font-size: 1rem;
-            color: #94a3b8;
-            margin: 0 0 1rem 0;
+        .card:hover { border-color: var(--border-2); }
+        .card:hover::before { opacity: 1; }
+
+        .card-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .stat-value {
-            font-size: 2.5rem;
-            font-weight: bold;
-            margin: 0;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
         }
 
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            display: inline-block;
+        .card-label .icon {
+            width: 16px; height: 16px;
+            opacity: 0.6;
         }
 
-        .status-online { background-color: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
-        .status-offline { background-color: #ef4444; }
+        /* =====================================================
+           Stat Cards (top row)
+        ===================================================== */
+        .stat-card {
+            display: flex;
+            flex-direction: column;
+        }
 
-        .progress-bar-container {
-            width: 100%;
-            height: 8px;
-            background-color: #334155;
+        .stat-value {
+            font-size: 2.4rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1;
+            font-family: var(--mono);
+            margin-bottom: 0.3rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .stat-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.55rem;
             border-radius: 4px;
+            align-self: flex-start;
+        }
+
+        .tag-green  { background: var(--green-dim);  color: var(--green); }
+        .tag-amber  { background: var(--amber-dim);  color: var(--amber); }
+        .tag-accent { background: var(--accent-dim); color: var(--accent); }
+        .tag-purple { background: var(--purple-dim); color: var(--purple); }
+        .tag-red    { background: var(--red-dim);    color: var(--red); }
+        .tag-muted  { background: rgba(92,122,155,0.1); color: var(--text-muted); }
+
+        /* =====================================================
+           Status Indicator
+        ===================================================== */
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .status-dot {
+            width: 11px; height: 11px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .status-dot.online  { background: var(--green); box-shadow: 0 0 8px var(--green-glow); animation: blink 2s infinite; }
+        .status-dot.offline { background: var(--red);   box-shadow: 0 0 8px var(--red-glow); }
+        .status-dot.waiting { background: var(--amber); }
+
+        /* =====================================================
+           Progress Bar
+        ===================================================== */
+        .progress-wrap {
             margin-top: 1rem;
+        }
+
+        .progress-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+
+        .progress-track {
+            height: 6px;
+            background: var(--border);
+            border-radius: 99px;
             overflow: hidden;
         }
 
-        .progress-bar {
+        .progress-fill {
             height: 100%;
-            background-color: var(--accent-color);
-            width: 0%;
-            transition: width 0.5s ease;
+            border-radius: 99px;
+            background: linear-gradient(90deg, var(--accent), var(--purple));
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .footer {
-            margin-top: 3rem;
-            color: #64748b;
-            font-size: 0.875rem;
+        .progress-fill.full {
+            background: linear-gradient(90deg, var(--green), #34d399);
+            box-shadow: 0 0 6px var(--green-glow);
         }
+
+        /* =====================================================
+           Section Dividers
+        ===================================================== */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        .section-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* =====================================================
+           Data Rows
+        ===================================================== */
+        .row { display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0; }
+        .row + .row { border-top: 1px solid var(--border); }
+        .row-label { color: var(--text-muted); font-size: 0.82rem; }
+        .row-value { font-size: 0.82rem; font-weight: 500; text-align: right; }
+        .row-value.mono { font-family: var(--mono); font-size: 0.78rem; }
+
+        /* =====================================================
+           Node List
+        ===================================================== */
+        .node-list { display: flex; flex-direction: column; gap: 0.6rem; }
+
+        .node-item {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.85rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            transition: border-color 0.3s;
+        }
+
+        .node-item.active { border-color: rgba(16,185,129,0.3); }
+        .node-item.waiting { border-color: rgba(245,158,11,0.25); }
+
+        .node-icon {
+            width: 34px; height: 34px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .node-icon.active  { background: var(--green-dim); }
+        .node-icon.waiting { background: var(--amber-dim); }
+        .node-icon.idle    { background: var(--surface-2); border: 1px solid var(--border); }
+
+        .node-info { flex: 1; min-width: 0; }
+        .node-name { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .node-meta { font-size: 0.72rem; color: var(--text-muted); font-family: var(--mono); }
+
+        .node-right { text-align: right; flex-shrink: 0; }
+        .node-status { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; }
+
+        /* =====================================================
+           Round History Table
+        ===================================================== */
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .history-table th {
+            text-align: left;
+            padding: 0.4rem 0.6rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .history-table td {
+            padding: 0.55rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-muted);
+            font-family: var(--mono);
+            font-size: 0.77rem;
+            vertical-align: middle;
+        }
+
+        .history-table tr:last-child td { border-bottom: none; }
+
+        .history-table tr:first-child td { color: var(--text); font-weight: 500; }
+
+        .round-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px; height: 26px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        /* =====================================================
+           Architecture Diagram
+        ===================================================== */
+        .arch-pipeline {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        .arch-node {
+            flex: 1;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 0;
+            padding: 0.75rem 0.5rem;
+            text-align: center;
+            font-size: 0.7rem;
+            position: relative;
+        }
+
+        .arch-node:first-child { border-radius: 8px 0 0 8px; }
+        .arch-node:last-child  { border-radius: 0 8px 8px 0; }
+
+        .arch-node + .arch-node {
+            border-left: none;
+        }
+
+        .arch-node + .arch-node::before {
+            content: '▶';
+            position: absolute;
+            left: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-dim);
+            font-size: 0.6rem;
+            z-index: 1;
+        }
+
+        .arch-node.highlighted {
+            background: var(--accent-dim);
+            border-color: rgba(56,189,248,0.3);
+        }
+
+        .arch-icon { font-size: 1.2rem; margin-bottom: 0.3rem; display: block; }
+        .arch-label { color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.62rem; }
+        .arch-sub { color: var(--text-dim); font-size: 0.6rem; margin-top: 0.2rem; }
+
+        /* =====================================================
+           Algorithm / Spec Details
+        ===================================================== */
+        .spec-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .spec-item {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.6rem 0.75rem;
+        }
+
+        .spec-key {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text-dim);
+            margin-bottom: 0.25rem;
+        }
+
+        .spec-val {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text);
+            font-family: var(--mono);
+        }
+
+        /* =====================================================
+           Empty State
+        ===================================================== */
+        .empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-dim);
+            font-size: 0.82rem;
+        }
+
+        .empty-state span { display: block; font-size: 1.5rem; margin-bottom: 0.5rem; opacity: 0.4; }
+
+        /* =====================================================
+           Footer
+        ===================================================== */
+        .footer {
+            grid-column: span 12;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .footer a { color: var(--accent); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+
+        /* =====================================================
+           Animations
+        ===================================================== */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .card { animation: fadeIn 0.4s ease both; }
+        .card:nth-child(1)  { animation-delay: 0.02s; }
+        .card:nth-child(2)  { animation-delay: 0.04s; }
+        .card:nth-child(3)  { animation-delay: 0.06s; }
+        .card:nth-child(4)  { animation-delay: 0.08s; }
+
+        /* Highlight flash on data update */
+        @keyframes flash {
+            0%   { background: rgba(56,189,248,0.15); }
+            100% { background: transparent; }
+        }
+
+        .flash { animation: flash 0.8s ease; }
+
+        /* =====================================================
+           Uptime badge
+        ===================================================== */
+        .uptime {
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Federated Aggregation Server</h1>
-        <p>Live Federated Learning (FedAvg) Monitoring</p>
-    </div>
+<div class="page">
 
-    <div class="dashboard-grid">
-        <!-- Server Status Card -->
-        <div class="card">
-            <h2>Server Status</h2>
-            <p class="stat-value" id="status-val">
-                <span class="status-dot status-offline" id="status-dot"></span>
-                <span id="status-text">Connecting...</span>
-            </p>
-        </div>
-
-        <!-- Current Round Card -->
-        <div class="card">
-            <h2>Current FL Round</h2>
-            <p class="stat-value" id="round-val" style="color: var(--accent-color);">0</p>
-        </div>
-
-        <!-- Pending Updates Card -->
-        <div class="card">
-            <h2>Pending Updates</h2>
-            <p class="stat-value"><span id="pending-val">0</span> / <span id="expected-val">?</span></p>
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="progress-bar"></div>
+    <!-- ========================================================
+         HEADER
+    ======================================================== -->
+    <header class="header">
+        <div class="header-left">
+            <div class="header-badge">Federated Edge Computing · IIoT</div>
+            <h1>FL Aggregation Server</h1>
+            <div class="header-sub">
+                <span class="header-meta-item">
+                    <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+                    FedAvg · 2-Node Cluster
+                </span>
+                <span class="header-meta-item">
+                    <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                    MLP Classifier · 11-Class IDS
+                </span>
+                <span class="header-meta-item">
+                    <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    Oracle Cloud · Render
+                </span>
             </div>
-            <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">Nodes ready for aggregation</p>
+        </div>
+        <div class="header-right">
+            <div class="live-pill" id="live-pill">
+                <div class="dot"></div>
+                <span id="live-text">CONNECTING</span>
+            </div>
+            <div class="refresh-timer" id="refresh-timer">Refreshing in 3s</div>
+        </div>
+    </header>
+
+    <!-- ========================================================
+         ROW 1: STAT CARDS
+    ======================================================== -->
+    <div class="grid-12" style="margin-bottom: 1rem;">
+
+        <!-- Server Status -->
+        <div class="card stat-card col-3" id="card-status">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Server Status
+            </div>
+            <div class="stat-value" id="stat-status" style="font-size:1.8rem; display:flex; align-items:center; gap:0.5rem;">
+                <div class="status-dot offline" id="stat-dot"></div>
+                <span id="stat-status-text" style="font-size:1.8rem;">—</span>
+            </div>
+            <div class="stat-label" id="stat-uptime">Starting up…</div>
+            <div class="stat-tag tag-muted" id="stat-deployment-tag">Oracle Cloud / Render</div>
+        </div>
+
+        <!-- FL Round -->
+        <div class="card stat-card col-3" id="card-round">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+                FL Round
+            </div>
+            <div class="stat-value" style="color: var(--accent);" id="stat-round">0</div>
+            <div class="stat-label">FedAvg rounds completed</div>
+            <div class="stat-tag tag-accent" id="stat-round-tag">Awaiting nodes</div>
+        </div>
+
+        <!-- Pending Updates -->
+        <div class="card stat-card col-3" id="card-pending">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                Node Updates
+            </div>
+            <div class="stat-value">
+                <span id="stat-pending" style="color: var(--green);">0</span>
+                <span style="color: var(--text-dim); font-size: 1.4rem;">&thinsp;/&thinsp;</span>
+                <span id="stat-expected" style="color: var(--text-muted); font-size: 1.8rem;">2</span>
+            </div>
+            <div class="stat-label">Nodes ready for aggregation</div>
+            <div class="progress-wrap">
+                <div class="progress-meta">
+                    <span>Aggregation progress</span>
+                    <span id="stat-progress-pct">0%</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="stat-progress-bar" style="width:0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Model -->
+        <div class="card stat-card col-3" id="card-model">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                Global Model
+            </div>
+            <div class="stat-value" style="font-size:1.1rem; color: var(--purple); margin-bottom: 0.5rem; font-family: var(--mono);" id="stat-arch">—</div>
+            <div class="stat-label">MLP architecture (layers)</div>
+            <div class="row" style="padding: 0.2rem 0;">
+                <span class="row-label" style="font-size:0.72rem;">Parameters</span>
+                <span class="row-value mono" id="stat-params" style="color:var(--purple);">—</span>
+            </div>
+            <div class="row" style="padding: 0.2rem 0;">
+                <span class="row-label" style="font-size:0.72rem;">Layers</span>
+                <span class="row-value mono" id="stat-layers">—</span>
+            </div>
+        </div>
+
+    </div><!-- /row 1 -->
+
+    <!-- ========================================================
+         ROW 2: PENDING NODES | SYSTEM INFO | ARCH DIAGRAM
+    ======================================================== -->
+    <div class="grid-12" style="margin-bottom: 1rem;">
+
+        <!-- Edge Nodes -->
+        <div class="card col-4">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                Edge Nodes · Current Round
+            </div>
+            <div class="node-list" id="node-list">
+                <!-- populated by JS -->
+                <div class="empty-state" id="node-empty">
+                    <span>📡</span>
+                    Waiting for node updates…
+                </div>
+            </div>
+        </div>
+
+        <!-- System Architecture Diagram -->
+        <div class="card col-8">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"/><path d="M14 15v2M8 15v2M12 17h.01M5 20h14"/></svg>
+                System Architecture
+            </div>
+            <div class="arch-pipeline">
+                <div class="arch-node">
+                    <span class="arch-icon">📈</span>
+                    <div class="arch-label">ADXL345</div>
+                    <div class="arch-sub">500 Hz · SPI</div>
+                    <div class="arch-sub">3-axis vibration</div>
+                </div>
+                <div class="arch-node">
+                    <span class="arch-icon">🔌</span>
+                    <div class="arch-label">ESP32</div>
+                    <div class="arch-sub">FreeRTOS · 3 tasks</div>
+                    <div class="arch-sub">Binary TCP</div>
+                </div>
+                <div class="arch-node">
+                    <span class="arch-icon">🥧</span>
+                    <div class="arch-label">Raspberry Pi</div>
+                    <div class="arch-sub">Feature extraction</div>
+                    <div class="arch-sub">MLP + IsoForest</div>
+                </div>
+                <div class="arch-node highlighted">
+                    <span class="arch-icon">☁️</span>
+                    <div class="arch-label">FL Server</div>
+                    <div class="arch-sub">FedAvg · This node</div>
+                    <div class="arch-sub">FastAPI</div>
+                </div>
+                <div class="arch-node">
+                    <span class="arch-icon">🌐</span>
+                    <div class="arch-label">Global Model</div>
+                    <div class="arch-sub">Aggregated MLP</div>
+                    <div class="arch-sub">Pushed back</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.25rem;">
+                <div class="spec-grid">
+                    <div class="spec-item">
+                        <div class="spec-key">Algorithm</div>
+                        <div class="spec-val">FedAvg (McMahan et al.)</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Aggregation Target</div>
+                        <div class="spec-val" id="spec-agg-target">2 nodes required</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Cyber Detector</div>
+                        <div class="spec-val">MLP Classifier · sklearn</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Physical Detector</div>
+                        <div class="spec-val">Isolation Forest</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Detection Classes</div>
+                        <div class="spec-val">11 (10 attacks + Normal)</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Sensor Window</div>
+                        <div class="spec-val">2.0 s · 1000 samples</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Node Protocol</div>
+                        <div class="spec-val">Binary TCP · magic=0xABCD</div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-key">Weight Format</div>
+                        <div class="spec-val">coefs[] + intercepts[]</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /row 2 -->
+
+    <!-- ========================================================
+         ROW 3: NODE REGISTRY | ROUND HISTORY
+    ======================================================== -->
+    <div class="grid-12" style="margin-bottom: 1rem;">
+
+        <!-- Node Registry -->
+        <div class="card col-4">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                Registered Nodes
+            </div>
+            <div id="registry-list">
+                <div class="empty-state" id="registry-empty">
+                    <span>🗂️</span>
+                    No nodes registered yet
+                </div>
+            </div>
+        </div>
+
+        <!-- Round History -->
+        <div class="card col-8">
+            <div class="card-label">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Round History
+                <span class="stat-tag tag-muted" style="margin-left: auto;" id="history-count">0 rounds</span>
+            </div>
+
+            <div id="history-container">
+                <div class="empty-state" id="history-empty">
+                    <span>⏳</span>
+                    No FL rounds completed yet.<br>
+                    Waiting for 2 nodes to submit updates.
+                </div>
+                <table class="history-table" id="history-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Round</th>
+                            <th>Completed</th>
+                            <th>Nodes</th>
+                            <th>Architecture</th>
+                            <th>Parameters</th>
+                            <th>Avg. Accuracy</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div><!-- /row 3 -->
+
+    <!-- ========================================================
+         FOOTER
+    ======================================================== -->
+    <div class="grid-12">
+        <div class="footer">
+            <span>
+                FL Aggregation Server v2.0 &nbsp;·&nbsp;
+                FedAvg (McMahan et al.) &nbsp;·&nbsp;
+                <span id="footer-uptime">Uptime: calculating…</span>
+            </span>
+            <span>
+                Auto-refreshing every 3 s &nbsp;·&nbsp;
+                <a href="/health">/health</a> &nbsp;·&nbsp;
+                <a href="/status">/status</a> &nbsp;·&nbsp;
+                <a href="/docs">/docs</a>
+            </span>
         </div>
     </div>
 
-    <div class="footer">
-        Auto-refreshing every 3 seconds
-    </div>
+</div><!-- /page -->
 
-    <script>
-        async function fetchHealth() {
-            try {
-                const response = await fetch('/health');
-                const data = await response.json();
-                
-                // Update Status
-                document.getElementById('status-text').textContent = 'Online';
-                document.getElementById('status-dot').className = 'status-dot status-online';
-                
-                // Update Round
-                document.getElementById('round-val').textContent = data.current_round;
-                
-                // Update Pending
-                document.getElementById('pending-val').textContent = data.pending_updates_count;
-                document.getElementById('expected-val').textContent = data.expected_clients;
-                
-                // Update Progress Bar
-                const progress = (data.pending_updates_count / data.expected_clients) * 100;
-                document.getElementById('progress-bar').style.width = `${progress}%`;
-                
-            } catch (error) {
-                console.error("Failed to fetch server status", error);
-                document.getElementById('status-text').textContent = 'Offline';
-                document.getElementById('status-dot').className = 'status-dot status-offline';
-            }
-        }
+<script>
+// =====================================================================
+// State
+// =====================================================================
+const STATE = {
+    online: false,
+    serverStartTime: null,
+    countdown: 3,
+};
 
-        // Fetch immediately, then every 3 seconds
-        fetchHealth();
-        setInterval(fetchHealth, 3000);
-    </script>
+// =====================================================================
+// Helpers
+// =====================================================================
+function fmt(n, decimals = 0) {
+    if (n == null) return '—';
+    return Number(n).toLocaleString(undefined, { maximumFractionDigits: decimals });
+}
+
+function fmtTime(isoStr) {
+    if (!isoStr) return '—';
+    try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    } catch { return isoStr; }
+}
+
+function fmtDate(isoStr) {
+    if (!isoStr) return '—';
+    try {
+        const d = new Date(isoStr);
+        const today = new Date();
+        if (d.toDateString() === today.toDateString()) return 'Today ' + fmtTime(isoStr);
+        return d.toLocaleDateString() + ' ' + fmtTime(isoStr);
+    } catch { return isoStr; }
+}
+
+function fmtUptime(startIso) {
+    if (!startIso) return '—';
+    const diff = Math.floor((Date.now() - new Date(startIso)) / 1000);
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    const s = diff % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function setEl(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function flashEl(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('flash');
+    void el.offsetWidth; // reflow
+    el.classList.add('flash');
+}
+
+// =====================================================================
+// Main Fetch
+// =====================================================================
+async function fetchStatus() {
+    try {
+        const res = await fetch('/status');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        STATE.online = true;
+        STATE.serverStartTime = data.server?.start_time || null;
+        updateAll(data);
+        setLive(true);
+    } catch (err) {
+        console.error('Fetch error:', err);
+        STATE.online = false;
+        setLive(false);
+    }
+}
+
+// =====================================================================
+// Live Indicator
+// =====================================================================
+function setLive(online) {
+    const pill = document.getElementById('live-pill');
+    const text = document.getElementById('live-text');
+    const dot  = document.querySelector('.live-pill .dot');
+
+    pill.classList.toggle('offline', !online);
+    text.textContent = online ? 'LIVE' : 'OFFLINE';
+}
+
+// =====================================================================
+// Update Functions
+// =====================================================================
+function updateAll(data) {
+    updateServerCard(data);
+    updateRoundCard(data);
+    updatePendingCard(data);
+    updateModelCard(data);
+    updateNodeList(data);
+    updateRegistry(data);
+    updateHistory(data);
+    updateSpecAggTarget(data);
+}
+
+function updateServerCard(data) {
+    const dot  = document.getElementById('stat-dot');
+    const text = document.getElementById('stat-status-text');
+    const upEl = document.getElementById('stat-uptime');
+
+    if (STATE.online) {
+        dot.className  = 'status-dot online';
+        text.textContent = 'Online';
+        text.style.color = 'var(--green)';
+        upEl.textContent = STATE.serverStartTime
+            ? 'Up since ' + fmtTime(STATE.serverStartTime)
+            : 'Healthy';
+    } else {
+        dot.className  = 'status-dot offline';
+        text.textContent = 'Offline';
+        text.style.color = 'var(--red)';
+        upEl.textContent = 'Connection lost';
+    }
+}
+
+function updateRoundCard(data) {
+    const round = data.current_round ?? 0;
+    const prev  = parseInt(document.getElementById('stat-round').textContent) || 0;
+
+    setEl('stat-round', round);
+    if (round !== prev) flashEl('card-round');
+
+    const tag = document.getElementById('stat-round-tag');
+    if (round === 0) {
+        tag.textContent = 'Awaiting first round';
+        tag.className = 'stat-tag tag-muted';
+    } else {
+        tag.textContent = `Next: Round ${(data.next_round ?? round + 1)}`;
+        tag.className = 'stat-tag tag-accent';
+    }
+}
+
+function updatePendingCard(data) {
+    const pending  = data.pending_updates_count ?? 0;
+    const expected = data.server?.expected_clients ?? 2;
+    const pct      = expected > 0 ? Math.min(100, Math.round((pending / expected) * 100)) : 0;
+
+    setEl('stat-pending',  pending);
+    setEl('stat-expected', expected);
+    setEl('stat-progress-pct', `${pct}%`);
+
+    const bar = document.getElementById('stat-progress-bar');
+    bar.style.width = `${pct}%`;
+    bar.className = pct >= 100 ? 'progress-fill full' : 'progress-fill';
+}
+
+function updateModelCard(data) {
+    const gm = data.global_model;
+    if (!gm) {
+        setEl('stat-arch',   'No model yet');
+        setEl('stat-params', '—');
+        setEl('stat-layers', '—');
+        return;
+    }
+    setEl('stat-arch',   gm.architecture ?? '—');
+    setEl('stat-params', gm.weight_params != null ? fmt(gm.weight_params) : '—');
+    setEl('stat-layers', gm.num_layers != null ? `${gm.num_layers} total` : '—');
+}
+
+function updateNodeList(data) {
+    const nodes    = data.pending_nodes ?? [];
+    const expected = data.server?.expected_clients ?? 2;
+    const container = document.getElementById('node-list');
+    const empty     = document.getElementById('node-empty');
+
+    // Build known expected node IDs from registry + pending
+    const registeredIds = (data.node_registry ?? []).map(n => n.node_id);
+    const pendingIds    = nodes.map(n => n.node_id);
+
+    // Determine which slots are waiting (known but not submitted)
+    const allKnown = [...new Set([...registeredIds, ...pendingIds])];
+
+    // Clear existing items (keep empty state)
+    Array.from(container.querySelectorAll('.node-item')).forEach(el => el.remove());
+
+    if (nodes.length === 0 && allKnown.length === 0) {
+        empty.style.display = '';
+        return;
+    }
+    empty.style.display = 'none';
+
+    // Render submitted nodes
+    nodes.forEach(n => {
+        const item = buildNodeItem(
+            n.node_id,
+            n.label ?? n.node_id,
+            'active',
+            n.architecture ?? '—',
+            n.local_accuracy != null ? `Acc: ${(n.local_accuracy * 100).toFixed(1)}%` : 'Weights submitted',
+            fmtTime(n.submitted_at),
+            'READY'
+        );
+        container.appendChild(item);
+    });
+
+    // Render known-but-not-submitted nodes as waiting
+    registeredIds
+        .filter(id => !pendingIds.includes(id))
+        .forEach(id => {
+            const reg = (data.node_registry ?? []).find(n => n.node_id === id);
+            const item = buildNodeItem(
+                id,
+                reg?.label ?? id,
+                'waiting',
+                reg?.architecture ?? '—',
+                `Last seen Rd ${reg?.last_round ?? '?'}`,
+                '—',
+                'WAITING'
+            );
+            container.appendChild(item);
+        });
+}
+
+function buildNodeItem(id, label, state, arch, meta, time, statusLabel) {
+    const icons = { active: '✅', waiting: '⏳', idle: '💤' };
+    const stateColors = { active: 'var(--green)', waiting: 'var(--amber)', idle: 'var(--text-dim)' };
+
+    const div = document.createElement('div');
+    div.className = `node-item ${state}`;
+    div.innerHTML = `
+        <div class="node-icon ${state}">${icons[state] ?? '📡'}</div>
+        <div class="node-info">
+            <div class="node-name">${label}</div>
+            <div class="node-meta">${id} · ${arch}</div>
+            <div class="node-meta">${meta}</div>
+        </div>
+        <div class="node-right">
+            <div class="node-status" style="color:${stateColors[state]}">${statusLabel}</div>
+            <div class="node-meta" style="margin-top:0.2rem;">${time}</div>
+        </div>
+    `;
+    return div;
+}
+
+function updateRegistry(data) {
+    const list  = data.node_registry ?? [];
+    const container = document.getElementById('registry-list');
+    const empty     = document.getElementById('registry-empty');
+
+    if (list.length === 0) {
+        empty.style.display = '';
+        return;
+    }
+    empty.style.display = 'none';
+
+    container.innerHTML = '';
+    list.forEach(node => {
+        const div = document.createElement('div');
+        div.style.cssText = 'margin-bottom: 0.5rem;';
+        div.innerHTML = `
+            <div class="node-item idle" style="border-color:var(--border)">
+                <div class="node-icon idle">🥧</div>
+                <div class="node-info">
+                    <div class="node-name">${node.label ?? node.node_id}</div>
+                    <div class="node-meta">${node.node_id}</div>
+                    <div class="node-meta">arch: ${node.architecture ?? '—'}</div>
+                </div>
+                <div class="node-right">
+                    <div class="stat-tag tag-accent" style="font-size:0.65rem; padding:0.15rem 0.4rem;">
+                        Rd&thinsp;${node.rounds_participated ?? 0}
+                    </div>
+                    <div class="node-meta" style="margin-top:0.3rem;">
+                        Last: ${node.last_round != null ? 'Rd ' + node.last_round : 'N/A'}
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function updateHistory(data) {
+    const rounds  = data.round_history ?? [];
+    const table   = document.getElementById('history-table');
+    const empty   = document.getElementById('history-empty');
+    const body    = document.getElementById('history-body');
+    const countEl = document.getElementById('history-count');
+
+    countEl.textContent = `${rounds.length} round${rounds.length !== 1 ? 's' : ''}`;
+
+    if (rounds.length === 0) {
+        table.style.display = 'none';
+        empty.style.display = '';
+        return;
+    }
+    empty.style.display = 'none';
+    table.style.display = '';
+
+    body.innerHTML = '';
+    rounds.forEach((r, idx) => {
+        const tr = document.createElement('tr');
+        const accStr = r.avg_local_accuracy != null
+            ? `${(r.avg_local_accuracy * 100).toFixed(1)}%`
+            : '—';
+        const sampStr = r.total_training_samples != null
+            ? fmt(r.total_training_samples)
+            : '';
+        tr.innerHTML = `
+            <td><div class="round-badge">${r.round}</div></td>
+            <td>${fmtDate(r.completed_at)}</td>
+            <td>${(r.participating_nodes ?? []).join(', ') || r.num_clients + ' nodes'}</td>
+            <td style="color:var(--purple); font-family: var(--mono);">${r.architecture ?? '—'}</td>
+            <td>${r.weight_params != null ? fmt(r.weight_params) : '—'}</td>
+            <td>${accStr}${sampStr ? ' <span style="color:var(--text-dim);font-size:0.68rem;">(' + sampStr + ' samples)</span>' : ''}</td>
+        `;
+        body.appendChild(tr);
+    });
+}
+
+function updateSpecAggTarget(data) {
+    const expected = data.server?.expected_clients ?? 2;
+    setEl('spec-agg-target', `${expected} nodes required`);
+}
+
+// =====================================================================
+// Countdown Timer
+// =====================================================================
+function tickCountdown() {
+    STATE.countdown -= 1;
+    if (STATE.countdown <= 0) {
+        STATE.countdown = 3;
+        fetchStatus();
+    }
+    document.getElementById('refresh-timer').textContent =
+        `Refreshing in ${STATE.countdown}s`;
+}
+
+// =====================================================================
+// Uptime ticker (local, every second)
+// =====================================================================
+function tickUptime() {
+    if (STATE.serverStartTime) {
+        document.getElementById('footer-uptime').textContent =
+            'Uptime: ' + fmtUptime(STATE.serverStartTime);
+    }
+}
+
+// =====================================================================
+// Boot
+// =====================================================================
+fetchStatus();                        // immediate first load
+setInterval(tickCountdown, 1000);     // countdown + re-fetch every 3s
+setInterval(tickUptime, 1000);        // uptime ticker
+</script>
 </body>
 </html>
