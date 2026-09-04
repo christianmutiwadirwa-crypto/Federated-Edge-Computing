@@ -90,6 +90,9 @@ pending_updates: Dict[str, Dict[str, Any]] = {}
 round_history: List[Dict[str, Any]] = []
 MAX_HISTORY = 20
 
+# History of global model validation accuracies submitted by nodes
+validation_history: List[Dict[str, Any]] = []
+
 # Per-node metadata tracked across rounds
 node_registry: Dict[str, Dict[str, Any]] = {}
 
@@ -111,6 +114,14 @@ class WeightUpdate(BaseModel):
     # Optional metadata from edge node
     local_accuracy: Optional[float] = None   # 0.0–1.0 if node reports it
     training_samples: Optional[int] = None   # samples used for local training
+    class_counts: Optional[List[int]] = None # samples per class for weighted aggregation
+
+
+class ValidationUpdate(BaseModel):
+    node_id: str
+    round: int
+    accuracy: float
+    samples: int
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +175,28 @@ async def run_fedavg() -> None:
                 np.array(pending_updates[nid]["coefs"][layer_idx])
                 for nid in node_ids
             ]
-            avg_layer = np.mean(layer_arrays, axis=0)
+            is_output = (layer_idx == num_coef_layers - 1)
+            has_counts = all(pending_updates[nid].get("class_counts") is not None for nid in node_ids)
+
+            if is_output and has_counts:
+                # Class-frequency weighting for the output layer
+                n_hidden, n_classes = layer_arrays[0].shape
+                avg_layer = np.zeros((n_hidden, n_classes))
+                counts = [pending_updates[nid]["class_counts"] for nid in node_ids]
+
+                for c in range(n_classes):
+                    total_c = sum(node_counts[c] for node_counts in counts)
+                    if total_c > 0:
+                        for i, nid in enumerate(node_ids):
+                            weight = counts[i][c] / total_c
+                            avg_layer[:, c] += layer_arrays[i][:, c] * weight
+                    else:
+                        for i, nid in enumerate(node_ids):
+                            avg_layer[:, c] += layer_arrays[i][:, c] / num_clients
+            else:
+                # Standard average for hidden layers
+                avg_layer = np.mean(layer_arrays, axis=0)
+                
             new_coefs.append(avg_layer.tolist())
 
         # Average intercepts
@@ -173,7 +205,27 @@ async def run_fedavg() -> None:
                 np.array(pending_updates[nid]["intercepts"][layer_idx])
                 for nid in node_ids
             ]
-            avg_layer = np.mean(layer_arrays, axis=0)
+            is_output = (layer_idx == num_intercept_layers - 1)
+            has_counts = all(pending_updates[nid].get("class_counts") is not None for nid in node_ids)
+
+            if is_output and has_counts:
+                # Class-frequency weighting for the output biases
+                n_classes = layer_arrays[0].shape[0]
+                avg_layer = np.zeros(n_classes)
+                counts = [pending_updates[nid]["class_counts"] for nid in node_ids]
+
+                for c in range(n_classes):
+                    total_c = sum(node_counts[c] for node_counts in counts)
+                    if total_c > 0:
+                        for i, nid in enumerate(node_ids):
+                            weight = counts[i][c] / total_c
+                            avg_layer[c] += layer_arrays[i][c] * weight
+                    else:
+                        for i, nid in enumerate(node_ids):
+                            avg_layer[c] += layer_arrays[i][c] / num_clients
+            else:
+                avg_layer = np.mean(layer_arrays, axis=0)
+                
             new_intercepts.append(avg_layer.tolist())
 
         # Compute aggregation metadata
@@ -268,6 +320,7 @@ async def submit_update(update: WeightUpdate, background_tasks: BackgroundTasks)
             "architecture": architecture,
             "local_accuracy": update.local_accuracy,
             "training_samples": update.training_samples,
+            "class_counts": update.class_counts,
         }
 
         # Update node registry
@@ -302,6 +355,27 @@ async def submit_update(update: WeightUpdate, background_tasks: BackgroundTasks)
         "nodes_expected": EXPECTED_CLIENTS
     }
 
+
+@app.post("/submit_validation")
+async def submit_validation(validation: ValidationUpdate):
+    """
+    Called by an Edge Node after it evaluates the incoming global model
+    on its local holdout dataset. Used for convergence dashboarding.
+    """
+    record = {
+        "node_id": validation.node_id,
+        "round": validation.round,
+        "accuracy": validation.accuracy,
+        "samples": validation.samples,
+        "submitted_at": _now_iso()
+    }
+    validation_history.append(record)
+    
+    # Keep it bounded (e.g. max 100 records)
+    if len(validation_history) > 100:
+        validation_history.pop(0)
+        
+    return {"message": "Validation metrics recorded."}
 
 @app.get("/global_model")
 async def get_global_model():
@@ -378,6 +452,7 @@ async def detailed_status():
         "global_model": global_meta,
         "node_registry": list(node_registry.values()),
         "round_history": list(reversed(round_history)),  # newest first
+        "validation_history": list(reversed(validation_history)),
     }
 
 
