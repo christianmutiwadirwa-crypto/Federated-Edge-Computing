@@ -262,7 +262,7 @@ async def run_fedavg() -> None:
             "participating_nodes": node_ids,
             "num_clients": num_clients,
             "architecture": architecture,
-            "weight_params": weight_params,
+            "weight_params": int(weight_params),
             "avg_local_accuracy": avg_accuracy,
             "total_training_samples": total_samples if total_samples > 0 else None,
         }
@@ -291,7 +291,7 @@ async def run_fedavg() -> None:
 @app.get("/", response_class=HTMLResponse)
 async def read_dashboard(request: Request):
     """Serve the rich HTML dashboard."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html", context={})
 
 
 @app.post("/submit_update")
