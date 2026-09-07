@@ -291,7 +291,7 @@ async def run_fedavg() -> None:
 @app.get("/", response_class=HTMLResponse)
 async def read_dashboard(request: Request):
     """Serve the rich HTML dashboard."""
-    return templates.TemplateResponse(request=request, name="index.html", context={})
+    return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.post("/submit_update")
