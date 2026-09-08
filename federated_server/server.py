@@ -79,6 +79,16 @@ global_model: Dict[str, Any] = {
     "intercepts": []
 }
 
+# The unified global scaler state (Chan's algorithm)
+global_scaler: Dict[str, Any] = {
+    "mean": None,
+    "var": None,
+    "n_samples": 0
+}
+
+# Pending scaler submissions for initialization (Round 0)
+pending_scalers: Dict[str, Dict[str, Any]] = {}
+
 # The number of successful FL rounds completed.
 round_number: int = 0
 
@@ -122,6 +132,13 @@ class ValidationUpdate(BaseModel):
     round: int
     accuracy: float
     samples: int
+
+
+class ScalerUpdate(BaseModel):
+    node_id: str
+    scaler_mean: List[float]
+    scaler_var: List[float]
+    scaler_samples: int
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +302,80 @@ async def run_fedavg() -> None:
 
 
 # ---------------------------------------------------------------------------
-# API Endpoints
+# Scaler Initialization Endpoints (Round 0)
+# ---------------------------------------------------------------------------
+
+@app.post("/init_scaler")
+async def init_scaler(update: ScalerUpdate):
+    """
+    Edge nodes upload their local scaler statistics (mean, variance, samples).
+    Once all EXPECTED_CLIENTS have uploaded, Chan's algorithm computes the Global Scaler.
+    """
+    global global_scaler, pending_scalers
+    
+    async with aggregation_lock:
+        nid = update.node_id
+        pending_scalers[nid] = {
+            "mean": np.array(update.scaler_mean),
+            "var": np.array(update.scaler_var),
+            "n_samples": update.scaler_samples
+        }
+        print(f"[{_now_iso()}] Received local scaler stats from {nid}.")
+        
+        if len(pending_scalers) == EXPECTED_CLIENTS:
+            print("--- Starting Scaler Aggregation (Chan's Algorithm) ---")
+            nodes = list(pending_scalers.values())
+            
+            # Start with Node 1
+            mu_global = nodes[0]["mean"]
+            var_global = nodes[0]["var"]
+            n_global = nodes[0]["n_samples"]
+            m2_global = var_global * n_global
+            
+            # Iteratively apply Chan's algorithm for remaining nodes
+            for node in nodes[1:]:
+                mu_local = node["mean"]
+                var_local = node["var"]
+                n_local = node["n_samples"]
+                m2_local = var_local * n_local
+                
+                n_new = n_global + n_local
+                # Update mean
+                mu_new = mu_global + (n_local / n_new) * (mu_local - mu_global)
+                # Update M2
+                m2_new = m2_global + m2_local + (n_global * n_local / n_new) * (mu_local - mu_global)**2
+                
+                mu_global = mu_new
+                m2_global = m2_new
+                n_global = n_new
+            
+            var_global = m2_global / n_global
+            
+            global_scaler["mean"] = mu_global.tolist()
+            global_scaler["var"] = var_global.tolist()
+            global_scaler["n_samples"] = n_global
+            
+            print("     Global Scaler merged successfully.")
+            # Do NOT clear pending_scalers so nodes can re-fetch if needed
+            
+        return {"status": "accepted"}
+
+
+@app.get("/global_scaler")
+async def get_global_scaler():
+    """Returns the unified global scaler statistics."""
+    async with aggregation_lock:
+        if global_scaler["mean"] is None:
+            raise HTTPException(status_code=404, detail="Global scaler not computed yet.")
+        return {
+            "scaler_mean": global_scaler["mean"],
+            "scaler_var": global_scaler["var"],
+            "scaler_samples": global_scaler["n_samples"]
+        }
+
+
+# ---------------------------------------------------------------------------
+# API Endpoints (Weight Updates)
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
