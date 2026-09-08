@@ -20,6 +20,7 @@
 =============================================================================
 """
 
+import os
 import threading
 import queue
 import warnings
@@ -28,6 +29,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Optional
+
+# Set DEBUG_INFERENCE=1 in environment to print raw feature vectors at inference time
+_DEBUG_INFERENCE = True
 
 
 # Default paths — can be overridden via config
@@ -63,12 +67,16 @@ class InferenceEngine(threading.Thread):
         self._stop_event    = threading.Event()
         self._lock          = threading.Lock()
 
+        # Telemetry for WebDashboard
+        self.last_inference_data = {}
+
         # Model artifacts — loaded by _load_model()
         self._model          = None
         self._scaler         = None
         self._label_encoder  = None
         self._feature_columns = None
         self._model_ready    = False
+        self._local_model    = None
 
         # Iso Forest artifacts
         self._iso_model          = None
@@ -115,6 +123,15 @@ class InferenceEngine(threading.Thread):
                 f"Classes: {list(self._label_encoder.classes_)} | "
                 f"Features: {len(self._feature_columns)}"
             )
+            
+            # --- Shadow Testing ---
+            local_model_path = self._models_dir / "fused_ids_model_local.pkl"
+            if local_model_path.exists():
+                self._local_model = joblib.load(local_model_path)
+                self._log("[InferenceEngine] Shadow model (local baseline) loaded for A/B testing.")
+            else:
+                self._local_model = None
+
         except Exception as exc:
             self._log(f"[InferenceEngine] Failed to load model: {exc}", level="error")
             self._model_ready = False
@@ -213,12 +230,9 @@ class InferenceEngine(threading.Thread):
                 iso_pred = self._iso_model.predict(iso_scaled)[0]
                 if iso_pred == -1:
                     iso_anomaly_detected = True
-                    self._alert_manager.alert(
-                        label="Physical_Anomaly",
-                        confidence=1.0,
-                        window_timestamp=ts,
-                        node_id=node_id,
-                    )
+                    # Note: do NOT alert here yet — wait for cyber verdict below.
+                    # If cyber also flags an attack, the cyber label takes priority.
+                    # If cyber says Normal, we raise SuspectedDataTampering.
 
         with self._lock:
             # Apply feature engineering (diffs + metadata strip)
@@ -226,6 +240,26 @@ class InferenceEngine(threading.Thread):
                 cyber_features=cyber,
                 physical_features=physical,
             )
+
+        # Debug: print raw features going into the models
+        if _DEBUG_INFERENCE:
+            key_vals = dict(zip(feature_keys, raw_vector))
+            interesting = {k: round(float(v), 4) for k, v in key_vals.items()
+                           if k in ['total_packets','packet_rate','mean_interarrival_time',
+                                    'reconnection_count','connection_duration','sequence_number_gap',
+                                    'packet_rate_diff','mean_interarrival_time_diff']}
+            print(f"[DEBUG] Live cyber features: {interesting}", flush=True)
+            
+            if physical:
+                iso_keys = self._iso_feature_columns
+                iso_vals = self._align_iso_features(physical)
+                if iso_vals is not None:
+                    phys_dict = dict(zip(iso_keys, iso_vals))
+                    phys_interesting = {k: round(float(v), 4) for k, v in phys_dict.items()
+                                        if k in ['Standard Deviation X', 'Peak-to-Peak X', 'Mean Z']}
+                    print(f"[DEBUG] Live physical features: {phys_interesting}", flush=True)
+
+
 
         # Align to the exact column order the model was trained on
         feature_vector = self._align_features(raw_vector, feature_keys)
@@ -245,17 +279,49 @@ class InferenceEngine(threading.Thread):
         pred_idx   = int(np.argmax(proba))
         confidence = float(proba[pred_idx])
         label      = self._label_encoder.classes_[pred_idx]
+        
+        # --- Shadow Testing Comparison ---
+        if self._local_model is not None:
+            local_proba = self._local_model.predict_proba(scaled)[0]
+            local_pred_idx = int(np.argmax(local_proba))
+            local_label = self._label_encoder.classes_[local_pred_idx]
+            
+            if local_label != label:
+                self._log(f"[ShadowTest] Disagreement! Local predicted {local_label}, Global predicted {label}", level="warning")
+
 
         if label != "Normal":
+            # Cyber attack detected — fire the cyber label regardless of physical state.
+            # (If iso_anomaly is also True, the attacker failed to hide physically;
+            #  the cyber label is the most specific classification available.)
             self._alert_manager.alert(
                 label=label,
                 confidence=confidence,
                 window_timestamp=ts,
                 node_id=node_id,
             )
+        elif iso_anomaly_detected:
+            # Cyber model sees Normal traffic, but physical sensor signals anomaly.
+            # This is the signature of a sophisticated attacker who correctly forged
+            # the CRC/packet structure but cannot fake the physical machine state.
+            self._alert_manager.alert(
+                label="SuspectedDataTampering",
+                confidence=1.0,
+                window_timestamp=ts,
+                node_id=node_id,
+            )
         else:
-            if not iso_anomaly_detected:
-                self._alert_manager.log_normal(window_timestamp=ts, node_id=node_id)
+            self._alert_manager.log_normal(window_timestamp=ts, node_id=node_id)
+                
+        # Store telemetry for the WebDashboard
+        self.last_inference_data = {
+            "window_timestamp": ts,
+            "cyber": cyber,
+            "physical": physical,
+            "network_label": label,
+            "network_confidence": confidence,
+            "iso_anomaly": iso_anomaly_detected
+        }
 
     def _align_iso_features(self, physical: dict) -> Optional[np.ndarray]:
         """Align physical dictionary to expected Isolation Forest columns."""

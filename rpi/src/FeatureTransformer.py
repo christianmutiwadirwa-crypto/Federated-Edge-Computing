@@ -52,13 +52,12 @@ PHYSICAL_METADATA_COLS = [
 ]
 
 # Cyber features on which temporal diff is computed.
-# These capture CHANGE between consecutive windows (gives the model memory).
-DIFF_FEATURE_COLS = [
-    "packet_rate",
-    "sequence_number_gap",
-    "crc_failure_count",
-    "mean_interarrival_time",
-]
+# NOTE: These were disabled because the ESP32's 2-second sample window and the
+# server's 2-second tumbling window run unsynchronised. This causes a permanent
+# ±0.5 aliasing sawtooth in packet_rate_diff, which the model learned to
+# associate with attack classes, producing false positives on every other window.
+# Low importance (ranked 11th and 14th of 29 features) — not worth the noise.
+DIFF_FEATURE_COLS: list = []
 
 
 class FeatureTransformer:
@@ -78,8 +77,8 @@ class FeatureTransformer:
 
     def __init__(self):
         # Rolling buffer: stores the previous window's values for diff cols.
-        # Initialized to zeros so the first window produces a zero diff.
         self._prev_values: dict = {col: 0.0 for col in DIFF_FEATURE_COLS}
+        self._is_first_window: bool = True
 
     # ------------------------------------------------------------------
     # Training-time API: transforms a full merged DataFrame at once
@@ -174,8 +173,13 @@ class FeatureTransformer:
         # --- Temporal diff features ---
         for col in DIFF_FEATURE_COLS:
             current_val = combined.get(col, 0.0)
-            combined[f"{col}_diff"] = current_val - self._prev_values[col]
+            if self._is_first_window:
+                combined[f"{col}_diff"] = 0.0
+            else:
+                combined[f"{col}_diff"] = current_val - self._prev_values[col]
             self._prev_values[col] = current_val
+            
+        self._is_first_window = False
 
         # Build sorted feature vector (alphabetical sort guarantees
         # the same column order as the training DataFrame)
@@ -191,3 +195,4 @@ class FeatureTransformer:
         across session boundaries.
         """
         self._prev_values = {col: 0.0 for col in DIFF_FEATURE_COLS}
+        self._is_first_window = True

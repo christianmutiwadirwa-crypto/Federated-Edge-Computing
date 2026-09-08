@@ -9,138 +9,814 @@
             --bg-color: #0f172a;
             --card-bg: #1e293b;
             --text-color: #f8fafc;
-            --accent-color: #10b981;
-            --alert-color: #ef4444;
-            --warning-color: #f59e0b;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            
+            --color-normal: #10b981;
+            --color-warning: #f59e0b;
+            --color-attack: #ef4444;
+            --color-offline: #64748b;
+            --color-accent: #3b82f6;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
-            margin: 0;
-            padding: 2rem;
+            padding: 1.5rem;
+            line-height: 1.5;
+        }
+
+        /* Layout */
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.25rem;
+        }
+
+        /* Header */
+        .header {
+            grid-column: span 12;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header-title h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .header-meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--color-normal);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .live-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: currentColor;
+        }
+
+        /* Cards */
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-header {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        /* Grid Spans */
+        .span-3 { grid-column: span 3; }
+        .span-4 { grid-column: span 4; }
+        .span-6 { grid-column: span 6; }
+        .span-8 { grid-column: span 8; }
+        .span-12 { grid-column: span 12; }
+
+        @media (max-width: 1024px) {
+            .span-3, .span-4 { grid-column: span 6; }
+            .span-6, .span-8 { grid-column: span 12; }
+        }
+
+        @media (max-width: 768px) {
+            .span-3, .span-4, .span-6, .span-8 { grid-column: span 12; }
+            .header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+        }
+
+        /* Typography & Data Pairs */
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .data-label { color: var(--text-muted); }
+        .data-value { font-weight: 500; }
+        
+        .big-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-top: 0.25rem;
+        }
+
+        /* Colors & Status */
+        .text-normal { color: var(--color-normal); }
+        .text-warning { color: var(--color-warning); }
+        .text-attack { color: var(--color-attack); }
+        .text-offline { color: var(--color-offline); }
+
+        .status-badge {
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            display: inline-block;
+        }
+        
+        .bg-normal { background: rgba(16, 185, 129, 0.15); color: var(--color-normal); }
+        .bg-warning { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+        .bg-attack { background: rgba(239, 68, 68, 0.15); color: var(--color-attack); }
+
+        /* Attack Panel specific */
+        .security-panel {
+            transition: all 0.3s ease;
+        }
+        
+        .security-panel.is-attack {
+            border-color: var(--color-attack);
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+            background-color: rgba(239, 68, 68, 0.05);
+        }
+
+        .security-panel.is-attack .card-header {
+            color: var(--color-attack);
+            border-bottom-color: rgba(239, 68, 68, 0.3);
+        }
+
+        /* Alerts List */
+        .alert-item {
+            padding: 0.75rem;
+            border-left: 3px solid var(--border-color);
+            background: rgba(0,0,0,0.1);
+            margin-bottom: 0.5rem;
+            font-size: 0.85rem;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .alert-item.active-alert {
+            border-left-color: var(--color-attack);
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .alert-item.resolved-alert {
+            border-left-color: var(--color-warning);
+        }
+
+        /* Canvas Chart */
+        .chart-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .chart-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        
+        .chart-btn.active {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        canvas {
+            width: 100%;
+            height: 180px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+        }
+
+        /* Pipeline Visual */
+        .pipeline {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 1rem 0;
+        }
+        
+        .pipeline-stage {
             display: flex;
             flex-direction: column;
             align-items: center;
-        }
-
-        .header {
             text-align: center;
-            margin-bottom: 2rem;
+            gap: 0.5rem;
+            position: relative;
+            flex: 1;
         }
-
-        .header h1 {
-            color: var(--accent-color);
-            margin: 0 0 0.5rem 0;
+        
+        .pipeline-stage::after {
+            content: '→';
+            position: absolute;
+            right: -5px;
+            top: 2px;
+            color: var(--border-color);
         }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-            width: 100%;
-            max-width: 1200px;
-        }
-
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            border: 1px solid #334155;
-        }
-
-        .card h2 {
-            font-size: 1rem;
-            color: #94a3b8;
-            margin: 0 0 1rem 0;
-            text-transform: uppercase;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: bold;
-            margin: 0;
-            color: var(--accent-color);
-        }
-
-        .alert-item {
-            background-color: rgba(239, 68, 68, 0.1);
-            border-left: 4px solid var(--alert-color);
-            padding: 1rem;
-            margin-bottom: 0.5rem;
-            border-radius: 0 4px 4px 0;
-        }
-
-        .alert-item strong {
-            color: var(--alert-color);
-        }
-
-        .alert-time {
-            font-size: 0.8rem;
-            color: #94a3b8;
+        
+        .pipeline-stage:last-child::after {
+            content: '';
         }
     </style>
 </head>
 <body>
 
+<div class="dashboard-container">
+    
+    <!-- HEADER -->
     <div class="header">
-        <h1>Local Edge Node Monitor</h1>
-        <p>Node ID: <span id="node-id" style="font-weight:bold; color: white;">Loading...</span></p>
+        <div class="header-title">
+            <h1>Local Edge Node Monitor</h1>
+            <div class="header-meta">
+                Node ID: <strong id="head-node-id" style="color:white;">N/A</strong> &nbsp;|&nbsp; 
+                Connection: <span id="head-connection" class="text-normal">Online</span>
+            </div>
+        </div>
+        <div class="live-indicator" id="live-indicator">
+            <div class="live-dot" id="live-dot"></div>
+            <span id="live-text">LIVE</span>
+            <span style="font-size:0.75rem; font-weight:normal; margin-left:0.5rem; color:var(--text-muted)" id="last-update-time">Waiting...</span>
+        </div>
     </div>
 
-    <div class="dashboard-grid">
-        <!-- Status Card -->
-        <div class="card">
-            <h2>System Status</h2>
-            <p class="stat-value" id="status-val" style="color: var(--accent-color);">Online</p>
-            <p style="margin-top: 1rem; color: #94a3b8;">Monitoring local sensors & network traffic.</p>
+    <!-- ROW 1: STATUS CARDS -->
+    <div class="card span-3">
+        <div class="card-header">EDGE NODE</div>
+        <div class="data-row"><span class="data-label">Status</span><span class="data-value status-badge bg-normal" id="card1-status">ONLINE</span></div>
+        <div class="data-row"><span class="data-label">Node ID</span><span class="data-value" id="card1-node">N/A</span></div>
+        <div class="data-row"><span class="data-label">Last Heartbeat</span><span class="data-value" id="card1-hb">N/A</span></div>
+    </div>
+
+    <div class="card span-3">
+        <div class="card-header">PHYSICAL MONITORING</div>
+        <div class="data-row"><span class="data-label">Sensor Status</span><span class="data-value" id="card2-status">Active</span></div>
+        <div class="data-row"><span class="data-label">Overall Condition</span><span class="data-value status-badge bg-normal" id="card2-cond">NORMAL</span></div>
+        <div class="data-row"><span class="data-label">Window Length</span><span class="data-value">2.0 s</span></div>
+    </div>
+
+    <div class="card span-3">
+        <div class="card-header">CYBER MONITORING</div>
+        <div class="data-row"><span class="data-label">Network Status</span><span class="data-value" id="card3-status">Active</span></div>
+        <div class="data-row"><span class="data-label">Packets/sec</span><span class="data-value" id="card3-pps">0</span></div>
+        <div class="data-row"><span class="data-label">Bytes/sec</span><span class="data-value" id="card3-bps">0</span></div>
+    </div>
+
+    <div class="card span-3">
+        <div class="card-header">ML DETECTOR</div>
+        <div class="data-row"><span class="data-label">Model Status</span><span class="data-value">Active</span></div>
+        <div class="data-row"><span class="data-label">Prediction</span><span class="data-value text-normal" id="card4-pred">Normal</span></div>
+        <div class="data-row"><span class="data-label">Confidence</span><span class="data-value" id="card4-conf">0%</span></div>
+    </div>
+
+    <!-- ROW 2: MAIN CYBER AND PHYSICAL SECTIONS -->
+    
+    <!-- Cyber Security Panel -->
+    <div class="card span-6 security-panel" id="cyber-panel">
+        <div class="card-header">CYBER SECURITY</div>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 1.5rem; text-align: center; min-height: 120px;">
+            <div id="cyber-banner" style="font-size: 2.5rem; font-weight: 800; letter-spacing: 2px; margin-bottom: 0.5rem;" class="text-normal">NORMAL</div>
+            <div id="cyber-attack-details" style="display: none; width: 100%;">
+                <div class="data-row"><span class="data-label">Attack Type:</span><span class="data-value text-attack" id="cyber-attack-type" style="font-size: 1.1rem;">-</span></div>
+                <div class="data-row"><span class="data-label">Confidence:</span><span class="data-value" id="cyber-attack-conf">-</span></div>
+                <div class="data-row"><span class="data-label">Detection Time:</span><span class="data-value" id="cyber-attack-time">-</span></div>
+            </div>
         </div>
 
-        <!-- Alerts Card -->
-        <div class="card" style="grid-column: span 2;">
-            <h2>Recent Security Alerts (Top 5)</h2>
-            <div id="alerts-container">
-                <p style="color: #94a3b8;">No alerts detected recently.</p>
+        <div style="border-top: 1px dashed var(--border-color); padding-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <div class="data-row"><span class="data-label">Packet Loss</span><span class="data-value" id="cyber-loss">0.0%</span></div>
+            <div class="data-row"><span class="data-label">CRC Failure Rate</span><span class="data-value" id="cyber-crc">0.0%</span></div>
+            <div class="data-row"><span class="data-label">Duplicate Pkts</span><span class="data-value" id="cyber-dup">0</span></div>
+            <div class="data-row"><span class="data-label">Out-of-Order Pkts</span><span class="data-value" id="cyber-ooo">0</span></div>
+            <div class="data-row"><span class="data-label">Seq Gap Total</span><span class="data-value" id="cyber-gap">0</span></div>
+            <div class="data-row"><span class="data-label">Inter-arrival (μ)</span><span class="data-value" id="cyber-iat">0.00 ms</span></div>
+        </div>
+    </div>
+
+    <!-- Physical Security Panel -->
+    <div class="card span-6 security-panel" id="phys-panel">
+        <div class="card-header">PHYSICAL SECURITY</div>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; min-height: 120px;">
+            <div id="phys-banner" style="font-size: 2.5rem; font-weight: 800; letter-spacing: 2px; margin-bottom: 0.5rem;" class="text-normal">NORMAL</div>
+            <div id="phys-attack-details" style="display: none; width: 100%;">
+                <div class="data-row"><span class="data-label">Status:</span><span class="data-value text-attack" id="phys-attack-type" style="font-size: 1.1rem;">-</span></div>
+                <div class="data-row"><span class="data-label">Detection Time:</span><span class="data-value" id="phys-attack-time">-</span></div>
+                <div style="margin-top: 1rem; font-size: 0.85rem; color: var(--text-muted); text-align: left; line-height: 1.5; padding: 0.75rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                    <i id="phys-explanation">Physical anomaly detected.</i>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        async function fetchStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-                
-                document.getElementById('node-id').textContent = data.node_id;
-                
-                const container = document.getElementById('alerts-container');
-                if (data.recent_alerts && data.recent_alerts.length > 0) {
-                    container.innerHTML = '';
-                    data.recent_alerts.forEach(alert => {
-                        const div = document.createElement('div');
-                        div.className = 'alert-item';
-                        div.innerHTML = `
-                            <strong>${alert.attack_label}</strong> detected! 
-                            (Confidence: ${(alert.confidence * 100).toFixed(1)}%)<br>
-                            <span class="alert-time">Time: ${alert.alert_time}</span>
-                        `;
-                        container.appendChild(div);
-                    });
-                } else {
-                    container.innerHTML = '<p style="color: var(--accent-color);">System Secure. No recent alerts.</p>';
-                }
-                
-            } catch (error) {
-                console.error("Failed to fetch node status", error);
-                document.getElementById('status-val').textContent = 'Offline';
-                document.getElementById('status-val').style.color = 'var(--alert-color)';
+    <!-- ROW 3: VIBRATION CHART AND PHYSICAL STATS -->
+    <div class="card span-8">
+        <div class="card-header">VIBRATION TREND (RMS)</div>
+        <div class="chart-controls">
+            <button class="chart-btn active" onclick="setChartAxis('X')">Axis X</button>
+            <button class="chart-btn" onclick="setChartAxis('Y')">Axis Y</button>
+            <button class="chart-btn" onclick="setChartAxis('Z')">Axis Z</button>
+        </div>
+        <canvas id="vibrationChart"></canvas>
+    </div>
+
+    <div class="card span-4">
+        <div class="card-header">PHYSICAL CONDITION</div>
+        
+        <div style="margin-bottom: 0.5rem;">
+            <strong style="color: var(--text-color); font-size: 0.85rem;">Axis X</strong>
+            <div class="data-row"><span class="data-label">Min / Mean / Max</span><span class="data-value" id="phys-x-stats">0.00 / 0.00 / 0.00</span></div>
+            <div class="data-row"><span class="data-label">RMS</span><span class="data-value" id="phys-x-rms">0.00</span></div>
+        </div>
+        
+        <div style="margin-bottom: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color);">
+            <strong style="color: var(--text-color); font-size: 0.85rem;">Axis Y</strong>
+            <div class="data-row"><span class="data-label">Min / Mean / Max</span><span class="data-value" id="phys-y-stats">0.00 / 0.00 / 0.00</span></div>
+            <div class="data-row"><span class="data-label">RMS</span><span class="data-value" id="phys-y-rms">0.00</span></div>
+        </div>
+
+        <div style="padding-top: 0.5rem; border-top: 1px dashed var(--border-color);">
+            <strong style="color: var(--text-color); font-size: 0.85rem;">Axis Z</strong>
+            <div class="data-row"><span class="data-label">Min / Mean / Max</span><span class="data-value" id="phys-z-stats">0.00 / 0.00 / 0.00</span></div>
+            <div class="data-row"><span class="data-label">RMS</span><span class="data-value" id="phys-z-rms">0.00</span></div>
+        </div>
+    </div>
+
+
+    <!-- ROW 4: ALERTS, PIPELINE, PERFORMANCE, FL -->
+    
+    <div class="card span-4">
+        <div class="card-header">RECENT SECURITY ALERTS</div>
+        <div id="alerts-container" style="max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">
+            <div style="color: var(--text-muted); text-align: center; padding: 2rem 0;">No alerts recorded.</div>
+        </div>
+    </div>
+
+    <div class="card span-8">
+        <div class="card-header">DATA PIPELINE</div>
+        <div class="pipeline">
+            <div class="pipeline-stage">
+                <div class="live-dot bg-normal"></div>
+                SENSORS
+            </div>
+            <div class="pipeline-stage">
+                <div class="live-dot bg-normal"></div>
+                EDGE NODE
+            </div>
+            <div class="pipeline-stage">
+                <div class="live-dot bg-normal"></div>
+                FEATURE EXTR.
+            </div>
+            <div class="pipeline-stage">
+                <div class="live-dot bg-normal"></div>
+                ML DETECTOR
+            </div>
+            <div class="pipeline-stage">
+                <div class="live-dot bg-normal"></div>
+                STORAGE
+            </div>
+            <div class="pipeline-stage">
+                <div class="live-dot bg-warning"></div>
+                CLOUD (FL)
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.5rem;">
+            <div>
+                <div class="card-header" style="border:none; padding:0; margin-bottom: 0.5rem;">EDGE NODE PERFORMANCE</div>
+                <div class="data-row"><span class="data-label">CPU Usage</span><span class="data-value" id="perf-cpu">N/A</span></div>
+                <div class="data-row"><span class="data-label">Memory Usage</span><span class="data-value" id="perf-mem">N/A</span></div>
+                <div class="data-row"><span class="data-label">Free Memory</span><span class="data-value" id="perf-free">N/A</span></div>
+            </div>
+            
+            <div>
+                <div class="card-header" style="border:none; padding:0; margin-bottom: 0.5rem;">DETECTION MODELS</div>
+                <div class="data-row"><span class="data-label">Cyber:</span><span class="data-value">MLP Classifier</span></div>
+                <div class="data-row"><span class="data-label">Physical:</span><span class="data-value">Isolation Forest</span></div>
+                <div class="data-row"><span class="data-label">Classes:</span><span class="data-value">11</span></div>
+            </div>
+
+            <div>
+                <div class="card-header" style="border:none; padding:0; margin-bottom: 0.5rem;">FEDERATED LEARNING</div>
+                <div class="data-row"><span class="data-label">Local Model</span><span class="data-value text-warning">Idle</span></div>
+                <div class="data-row"><span class="data-label">Agg. Status</span><span class="data-value text-offline">Offline</span></div>
+                <div class="data-row"><span class="data-label">Model Version</span><span class="data-value">N/A</span></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ----------------------------------------------------
+    // Label Formatter — strip "Experiment" suffix and
+    // convert internal names to human-readable display names
+    // ----------------------------------------------------
+    const LABEL_MAP = {
+        "Normal":                    "Normal",
+        "FloodingExperiment":        "Flooding",
+        "PacketLossExperiment":      "Packet Loss",
+        "DuplicatePacketExperiment": "Duplicate Packet",
+        "DelayExperiment":           "Delay Attack",
+        "ConnectionResetExperiment": "Connection Reset",
+        "DeviceSpoofExperiment":     "Device Spoofing",
+        "DataTamperingExperiment":   "Data Tampering",
+        "PacketInjectionExperiment": "Packet Injection",
+        "ReplayExperiment":          "Replay Attack",
+        "SlowDoSExperiment":         "Slow DoS",
+        "SuspectedDataTampering":    "Suspected Tampering",
+        "Physical_Anomaly":          "Physical Anomaly",
+    };
+
+    function formatLabel(raw) {
+        if (!raw) return "Unknown";
+        return LABEL_MAP[raw] || raw.replace(/Experiment$/, "").replace(/([A-Z])/g, " $1").trim();
+    }
+
+    // ----------------------------------------------------
+    // Application State
+    // ----------------------------------------------------
+    const STATE = {
+        lastFetch: 0,
+        chartAxis: 'X',
+        history: {
+            X: [], Y: [], Z: []
+        },
+        maxHistory: 60,
+        consecutiveAlerts: {}
+    };
+
+    // ----------------------------------------------------
+    // Main Fetch Loop
+    // ----------------------------------------------------
+    async function fetchTelemetry() {
+        try {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+            
+            const now = Date.now();
+            STATE.lastFetch = now;
+            updateLiveIndicator(true, "Just now");
+
+            updateHeader(data);
+            updatePerformance(data.performance);
+            
+            if (data.inference_data && data.inference_data.window_timestamp) {
+                updateSystemStatus(data.inference_data);
+                updateCyberMetrics(data.inference_data);
+                updatePhysicalMetrics(data.inference_data);
+                updateMLStatus(data.inference_data);
+                updateAlerts(data.recent_alerts);
             }
+
+        } catch (err) {
+            console.error("Fetch error:", err);
+            updateLiveIndicator(false, "Offline");
+        }
+    }
+
+    // ----------------------------------------------------
+    // Update Functions
+    // ----------------------------------------------------
+    function updateLiveIndicator(isLive, textTime) {
+        const ind = document.getElementById('live-indicator');
+        const text = document.getElementById('live-text');
+        const time = document.getElementById('last-update-time');
+        
+        if (isLive) {
+            ind.style.background = 'rgba(16, 185, 129, 0.1)';
+            ind.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+            ind.style.color = 'var(--color-normal)';
+            text.textContent = 'LIVE';
+        } else {
+            ind.style.background = 'rgba(100, 116, 139, 0.1)';
+            ind.style.borderColor = 'rgba(100, 116, 139, 0.2)';
+            ind.style.color = 'var(--color-offline)';
+            text.textContent = 'STALE';
+        }
+        time.textContent = textTime;
+    }
+
+    function updateHeader(data) {
+        document.getElementById('head-node-id').textContent = data.node_id;
+        document.getElementById('card1-node').textContent = data.node_id;
+    }
+
+    function updateSystemStatus(inf) {
+        document.getElementById('card1-hb').textContent = inf.window_timestamp.split('T')[1]?.split('.')[0] || "N/A";
+    }
+
+    function updateCyberMetrics(inf) {
+        const c = inf.cyber;
+        if (!c) return;
+
+        // Calculate rates assuming 2.0s window
+        const pkts = c.total_packets || 0;
+        const bytes = c.total_bytes || 0;
+        document.getElementById('card3-pps').textContent = (pkts / 2.0).toFixed(1);
+        document.getElementById('card3-bps').textContent = (bytes / 2.0).toFixed(0);
+
+        document.getElementById('cyber-loss').textContent = `${(c.packet_loss_rate * 100 || 0).toFixed(2)}%`;
+        
+        // Compute CRC failure rate from count
+        const crcRate = pkts > 0 ? (c.crc_failure_count || 0) / pkts : 0;
+        document.getElementById('cyber-crc').textContent = `${(crcRate * 100).toFixed(2)}%`;
+        
+        document.getElementById('cyber-dup').textContent = c.duplicate_packet_count || 0;
+        document.getElementById('cyber-ooo').textContent = c.out_of_order_packet_count || 0;
+        document.getElementById('cyber-gap').textContent = c.sequence_number_gap || 0;
+        document.getElementById('cyber-iat').textContent = `${(c.mean_interarrival_time * 1000 || 0).toFixed(2)} ms`;
+    }
+
+    function updatePhysicalMetrics(inf) {
+        const p = inf.physical;
+        if (!p) return;
+
+        const updateAxis = (axis, id) => {
+            const min = parseFloat(p[`Minimum ${axis}`] || 0).toFixed(2);
+            const mean = parseFloat(p[`Mean ${axis}`] || 0).toFixed(2);
+            const max = parseFloat(p[`Maximum ${axis}`] || 0).toFixed(2);
+            const rms = parseFloat(p[`RMS ${axis}`] || 0);
+            
+            document.getElementById(`phys-${id}-stats`).textContent = `${min} / ${mean} / ${max}`;
+            document.getElementById(`phys-${id}-rms`).textContent = rms.toFixed(2);
+            
+            // Push to history
+            STATE.history[axis].push(rms);
+            if (STATE.history[axis].length > STATE.maxHistory) {
+                STATE.history[axis].shift();
+            }
+        };
+
+        updateAxis('X', 'x');
+        updateAxis('Y', 'y');
+        updateAxis('Z', 'z');
+        
+        // Update condition based on isolation forest
+        const cond = document.getElementById('card2-cond');
+        if (inf.iso_anomaly) {
+            cond.textContent = "ANOMALY";
+            cond.className = "data-value status-badge bg-attack";
+        } else {
+            cond.textContent = "NORMAL";
+            cond.className = "data-value status-badge bg-normal";
         }
 
-        fetchStatus();
-        setInterval(fetchStatus, 3000);
-    </script>
+        drawChart();
+    }
+
+    // ----------------------------------------------------
+    // Update Functions
+    // ----------------------------------------------------
+    function updateMLStatus(inf) {
+        const lbl  = inf.network_label || "Normal";
+        const displayLbl = formatLabel(lbl);
+        const conf = ((inf.network_confidence || 0) * 100).toFixed(1);
+        const ts   = inf.window_timestamp?.split('T')[1]?.split('.')[0] || "";
+
+        // ── Shared summary card (top-right) ─────────────────────────────
+        const cardPred = document.getElementById('card4-pred');
+        const isSuspected = lbl === "Normal" && inf.iso_anomaly;
+        cardPred.textContent = isSuspected ? "Suspected Tampering" : displayLbl;
+        cardPred.className = (lbl === "Normal" && !inf.iso_anomaly)
+            ? "data-value text-normal" : "data-value text-attack";
+        document.getElementById('card4-conf').textContent = `${conf}%`;
+
+        // ── CYBER PANEL ─────────────────────────────────────────────────
+        const cyberPanel   = document.getElementById('cyber-panel');
+        const cyberBanner  = document.getElementById('cyber-banner');
+        const cyberDetails = document.getElementById('cyber-attack-details');
+
+        if (lbl === "Normal") {
+            cyberBanner.textContent = "NORMAL";
+            cyberBanner.className = "text-normal";
+            cyberDetails.style.display = "none";
+            cyberPanel.classList.remove('is-attack');
+        } else {
+            cyberBanner.textContent = "ATTACK DETECTED";
+            cyberBanner.className = "text-attack";
+            cyberDetails.style.display = "block";
+            document.getElementById('cyber-attack-type').textContent = displayLbl;
+            document.getElementById('cyber-attack-conf').textContent = `${conf}%`;
+            document.getElementById('cyber-attack-time').textContent = ts;
+            cyberPanel.classList.add('is-attack');
+        }
+
+        // ── PHYSICAL PANEL ──────────────────────────────────────────────
+        const physPanel    = document.getElementById('phys-panel');
+        const physBanner   = document.getElementById('phys-banner');
+        const physDetails  = document.getElementById('phys-attack-details');
+        const physExpl     = document.getElementById('phys-explanation');
+
+        if (inf.iso_anomaly) {
+            physBanner.textContent = isSuspected ? "SUSPECTED TAMPERING" : "ANOMALY DETECTED";
+            physBanner.className = "text-attack";
+            physDetails.style.display = "block";
+            document.getElementById('phys-attack-type').textContent = isSuspected ? "Suspected Data Tampering" : "Physical Anomaly";
+            document.getElementById('phys-attack-time').textContent = ts;
+            physPanel.classList.add('is-attack');
+            
+            if (isSuspected) {
+                physExpl.innerHTML = 'Physical anomaly detected but cyber traffic appears normal.<br>Possible causes: <strong style="color:var(--color-warning)">Sophisticated data tampering</strong> or genuine machine fault.';
+            } else {
+                physExpl.innerHTML = 'Physical anomaly detected concurrently with a cyber attack.<br>The physical machine state has been disrupted.';
+            }
+        } else {
+            physBanner.textContent = "NORMAL";
+            physBanner.className = "text-normal";
+            physDetails.style.display = "none";
+            physPanel.classList.remove('is-attack');
+        }
+    }
+
+    function updateAlerts(alerts) {
+        const container = document.getElementById('alerts-container');
+        if (!alerts || alerts.length === 0) return;
+
+        // Deduplicate logic
+        const grouped = [];
+        let currentGroup = null;
+
+        alerts.forEach(a => {
+            if (!currentGroup) {
+                currentGroup = { ...a, count: 1, first_time: a.alert_time, last_time: a.alert_time };
+            } else if (currentGroup.attack_label === a.attack_label) {
+                currentGroup.count++;
+                currentGroup.last_time = a.alert_time;
+                currentGroup.confidence = Math.max(currentGroup.confidence, a.confidence); // Store max conf
+            } else {
+                grouped.push(currentGroup);
+                currentGroup = { ...a, count: 1, first_time: a.alert_time, last_time: a.alert_time };
+            }
+        });
+        if (currentGroup) grouped.push(currentGroup);
+
+        // Render
+        container.innerHTML = '';
+        
+        // Reverse back so newest is at the top
+        grouped.reverse().slice(0, 10).forEach((grp, idx) => {
+            const div = document.createElement('div');
+            
+            // If it's the very first item and occurred within the last 5 seconds, it's ACTIVE
+            const isRecent = idx === 0 && (Date.now() - STATE.lastFetch) < 10000;
+            
+            div.className = `alert-item ${isRecent ? 'active-alert' : 'resolved-alert'}`;
+            
+            const durationSecs = grp.count * 2; // Rough duration based on 2s windows
+            
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <strong style="color: ${isRecent ? 'var(--color-attack)' : 'var(--color-warning)'}">
+                        ${formatLabel(grp.attack_label)}
+                    </strong>
+                    <span class="status-badge ${isRecent ? 'bg-attack' : 'bg-warning'}">${isRecent ? 'ACTIVE' : 'RESOLVED'}</span>
+                </div>
+                <div>Confidence: ${(grp.confidence * 100).toFixed(1)}%</div>
+                ${grp.count > 1 ? `<div>Duration: ~${durationSecs} sec</div>` : ''}
+                <div style="color: var(--text-muted); font-size: 0.75rem; margin-top:4px;">
+                    ${grp.last_time}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function updatePerformance(perf) {
+        if (!perf) return;
+        document.getElementById('perf-cpu').textContent = perf.cpu_usage || "N/A";
+        document.getElementById('perf-mem').textContent = perf.mem_usage || "N/A";
+        document.getElementById('perf-free').textContent = perf.mem_free || "N/A";
+    }
+
+    // ----------------------------------------------------
+    // Chart Logic (Canvas Native)
+    // ----------------------------------------------------
+    function setChartAxis(axis) {
+        STATE.chartAxis = axis;
+        document.querySelectorAll('.chart-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if(btn.textContent.includes(axis)) btn.classList.add('active');
+        });
+        drawChart();
+    }
+
+    function drawChart() {
+        const canvas = document.getElementById('vibrationChart');
+        if(!canvas) return;
+        
+        // Handle DPI scaling
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        
+        const width = rect.width;
+        const height = rect.height;
+        
+        ctx.clearRect(0, 0, width, height);
+        
+        const data = STATE.history[STATE.chartAxis];
+        if(data.length < 2) {
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('Awaiting data...', 10, 20);
+            return;
+        }
+
+        // Find min/max for scaling
+        let min = Math.min(...data);
+        let max = Math.max(...data);
+        if (max === min) { max += 0.1; min -= 0.1; }
+        
+        const padding = 10;
+        const graphWidth = width - (padding * 2);
+        const graphHeight = height - (padding * 2);
+        
+        const xStep = graphWidth / (STATE.maxHistory - 1);
+        
+        // Draw path
+        ctx.beginPath();
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        
+        data.forEach((val, i) => {
+            // Right align the data
+            const xOffset = STATE.maxHistory - data.length;
+            const x = padding + ((i + xOffset) * xStep);
+            
+            // Invert Y axis for canvas drawing
+            const normalizedY = (val - min) / (max - min);
+            const y = height - padding - (normalizedY * graphHeight);
+            
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        
+        ctx.stroke();
+        
+        // Fill area
+        ctx.lineTo(padding + graphWidth, height);
+        ctx.lineTo(padding + (STATE.maxHistory - data.length)*xStep, height);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+        ctx.fill();
+    }
+
+    // ----------------------------------------------------
+    // Time updating
+    // ----------------------------------------------------
+    setInterval(() => {
+        if (STATE.lastFetch > 0) {
+            const secs = Math.floor((Date.now() - STATE.lastFetch) / 1000);
+            if (secs > 5) {
+                updateLiveIndicator(false, `${secs} seconds ago`);
+            } else {
+                updateLiveIndicator(true, `${secs} seconds ago`);
+            }
+        }
+    }, 1000);
+
+    // Initial fetch and loop
+    fetchTelemetry();
+    setInterval(fetchTelemetry, 2000);
+</script>
+
 </body>
 </html>

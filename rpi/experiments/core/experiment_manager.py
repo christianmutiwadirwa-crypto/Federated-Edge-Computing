@@ -34,6 +34,7 @@ class ExperimentManager:
         "ConnectionReset":  ("experiments.connectionreset_experiment",  "ConnectionResetExperiment"),
         "DeviceSpoof":      ("experiments.devicespoof_experiment",      "DeviceSpoofExperiment"),
         "DataTampering":    ("experiments.datatampering_experiment",    "DataTamperingExperiment"),
+        "TrueDataTampering":("experiments.truedatatampering_experiment","TrueDataTamperingExperiment"),
         "Normal":           ("experiments.normal_experiment",           "NormalExperiment"),
     }
 

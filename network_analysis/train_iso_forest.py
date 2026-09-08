@@ -21,7 +21,7 @@ from sklearn.preprocessing import StandardScaler
 DEFAULT_RESULTS_DIR = Path(__file__).resolve().parent.parent / "rpi" / "experiments" / "results"
 DEFAULT_OUTPUT_DIR  = Path(__file__).resolve().parent.parent / "models"
 RANDOM_STATE        = 42
-CONTAMINATION       = 0.01  # Expected anomaly rate in training data (set low for normal data)
+CONTAMINATION       = 0.001  # Expected anomaly rate in training data (set very low to be lenient)
 
 PHYSICAL_METADATA_COLS = ["Timestamp", "Node ID", "Label"]
 
@@ -68,8 +68,7 @@ def train_isolation_forest(df: pd.DataFrame):
     X = X.dropna()
     feature_columns = list(X.columns)
     
-    print(f"\n  Training Isolation Forest on {len(X)} normal physical samples, "
-          f"{len(feature_columns)} features...")
+    print(f"\n  Initial normal physical samples: {len(X)}, Features: {len(feature_columns)}")
     
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
