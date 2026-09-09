@@ -461,6 +461,23 @@ async def submit_update(update: WeightUpdate, background_tasks: BackgroundTasks)
     }
 
 
+@app.post("/reset")
+async def reset_server():
+    """Wipe all server state to start a fresh federated learning run."""
+    global global_model, round_number, pending_updates, round_history, node_registry, validation_history
+    
+    async with aggregation_lock:
+        global_model = {"coefs": [], "intercepts": []}
+        round_number = 0
+        pending_updates.clear()
+        round_history.clear()
+        node_registry.clear()
+        validation_history.clear()
+        
+    print("--- SERVER STATE RESET ---")
+    return {"message": "Server state completely reset. Ready for Round 1."}
+
+
 @app.post("/submit_validation")
 async def submit_validation(validation: ValidationUpdate):
     """
