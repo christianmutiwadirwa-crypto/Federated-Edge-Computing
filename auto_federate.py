@@ -26,14 +26,14 @@ TEST_SCRIPT = BASE_DIR / "network_analysis" / "test_fused_model.py"
 FL_CLIENT   = BASE_DIR / "rpi" / "src" / "FederatedClient.py"
 
 
-def evaluate_model(model_path: Path, label: str) -> float:
-    """Run test_fused_model.py against the evaluation set and return accuracy."""
+def evaluate_model(model_path: Path, label: str) -> tuple[float, str]:
+    """Run test_fused_model.py against the evaluation set and return (accuracy, report_str)."""
     if not model_path.exists():
         print(f"  [SKIP] {label}: model file not found ({model_path.name})")
-        return -1.0
+        return -1.0, ""
     if not EVAL_DIR.exists():
         print(f"  [SKIP] Evaluation dataset not found at {EVAL_DIR}")
-        return -1.0
+        return -1.0, ""
 
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         tmp_path = Path(tmp.name)
@@ -53,15 +53,15 @@ def evaluate_model(model_path: Path, label: str) -> float:
         )
         if result.returncode != 0:
             print(f"  [ERROR] {label} evaluation failed:\n{result.stderr[:400]}")
-            return -1.0
+            return -1.0, ""
 
         with open(tmp_path) as f:
             metrics = json.load(f)
-        return metrics.get("accuracy", -1.0)
+        return metrics.get("accuracy", -1.0), metrics.get("report_str", "")
 
     except Exception as e:
         print(f"  [ERROR] {label} evaluation crashed: {e}")
-        return -1.0
+        return -1.0, ""
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -125,8 +125,8 @@ def main():
         local_path  = ARCHIVE_DIR / f"fused_ids_model_local_R{i}.pth"
         global_path = ARCHIVE_DIR / f"fused_ids_model_global_R{i}.pth"
 
-        local_acc  = evaluate_model(local_path,  f"Local  R{i}")
-        global_acc = evaluate_model(global_path, f"Global R{i}")
+        local_acc,  local_report  = evaluate_model(local_path,  f"Local  R{i}")
+        global_acc, global_report = evaluate_model(global_path, f"Global R{i}")
 
         history.append({"round": i, "local_acc": local_acc, "global_acc": global_acc})
 
@@ -136,6 +136,11 @@ def main():
         print(f"\n  Round {i} Results:")
         print(f"    Local Model  Accuracy: {local_str}")
         print(f"    Global Model Accuracy: {global_str}")
+
+        # Print classification report for the global model
+        if global_report:
+            print(f"\n  --- Global Model Classification Report (R{i}) ---")
+            print(global_report)
 
         # Print the running table
         print_accuracy_table(history)

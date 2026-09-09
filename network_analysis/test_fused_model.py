@@ -14,7 +14,8 @@ import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import pandas as pd
 
 # FeatureTransformer and mlp_torch live in their respective directories
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "rpi" / "src"))
@@ -85,12 +86,38 @@ def test_model(model_path: Path, results_dir: Path, output_json: Path, models_di
 
     acc = accuracy_score(y_encoded, preds)
 
-    metrics = {"accuracy": acc, "samples": len(X)}
+    # --- Per-class report ---
+    class_names = label_encoder.classes_
+    report_str  = classification_report(
+        y_encoded, preds,
+        target_names=class_names,
+        zero_division=0
+    )
+    report_dict = classification_report(
+        y_encoded, preds,
+        target_names=class_names,
+        zero_division=0,
+        output_dict=True
+    )
+    cm = confusion_matrix(y_encoded, preds)
+    cm_df = pd.DataFrame(cm, index=class_names, columns=class_names)
+
+    metrics = {
+        "accuracy":   acc,
+        "samples":    len(X),
+        "report":     report_dict,
+        "report_str": report_str,
+        "confusion_matrix": cm_df.to_dict(),
+    }
     with open(output_json, "w") as f:
-        json.dump(metrics, f)
+        json.dump(metrics, f, indent=2)
 
     print(f"[*] Accuracy: {acc * 100:.2f}% ({len(X)} samples)")
-    print(f"[*] Saved metrics to {output_json}")
+    print(f"\n[*] Classification Report:")
+    print(report_str)
+    print(f"[*] Confusion Matrix:")
+    print(cm_df.to_string())
+    print(f"\n[*] Saved metrics to {output_json}")
 
 
 if __name__ == "__main__":
