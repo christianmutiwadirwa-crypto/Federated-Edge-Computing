@@ -64,7 +64,8 @@ def load_fused_dataset(results_dir: Path) -> pd.DataFrame:
     results_dir, apply sensor fusion via merge_asof, and return one unified
     DataFrame with all experiments concatenated.
     """
-    cyber_files = sorted(results_dir.rglob("cyber_data.csv"))
+    cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
+    cyber_files = sorted(cyber_files)
     if not cyber_files:
         raise FileNotFoundError(f"No cyber_data.csv files found under: {results_dir}")
 
@@ -146,12 +147,21 @@ def train(df: pd.DataFrame):
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_encoded,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
-        stratify=y_encoded,
-    )
+    # Chronological split per class to avoid time-series leakage
+    X_train_list, X_test_list, y_train_list, y_test_list = [], [], [], []
+    for c in np.unique(y_encoded):
+        idx = np.where(y_encoded == c)[0]
+        split_point = int(len(idx) * (1 - TEST_SIZE))
+        train_idx, test_idx = idx[:split_point], idx[split_point:]
+        X_train_list.append(X.iloc[train_idx])
+        X_test_list.append(X.iloc[test_idx])
+        y_train_list.append(y_encoded[train_idx])
+        y_test_list.append(y_encoded[test_idx])
+    
+    X_train = pd.concat(X_train_list)
+    X_test  = pd.concat(X_test_list)
+    y_train = np.concatenate(y_train_list)
+    y_test  = np.concatenate(y_test_list)
 
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)

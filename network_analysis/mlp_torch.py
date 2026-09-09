@@ -26,12 +26,12 @@ from pathlib import Path
 class FederatedMLP(nn.Module):
     """
     MLP for federated IDS.
-    Architecture: Input → 100 → ReLU → 50 → ReLU → 11 (output logits)
-    Matches the existing FL server topology: 100→100→50→11 when including
+    Architecture: Input → 100 → ReLU → 50 → ReLU → 9 (output logits)
+    Matches the existing FL server topology: 100→100→50→9 when including
     input dimension in the description.
     """
 
-    def __init__(self, input_dim: int, hidden_sizes: tuple = (100, 50), num_classes: int = 11):
+    def __init__(self, input_dim: int, hidden_sizes: tuple = (100, 50), num_classes: int = 9):
         super().__init__()
         self.input_dim    = input_dim
         self.hidden_sizes = hidden_sizes

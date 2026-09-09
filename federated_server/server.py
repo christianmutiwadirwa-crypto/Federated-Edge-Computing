@@ -12,7 +12,7 @@
 
  Edge Node Hardware:
    - Sensor:       ADXL345 (SPI, 500 Hz, 3-axis vibration)
-   - Processor:    Raspberry Pi (Python, sklearn MLP, 11-class IDS)
+   - Processor:    Raspberry Pi (Python, sklearn MLP, 9-class IDS)
    - Protocol:     Custom binary TCP (magic=0xABCD, ACK=0x06)
 
  Endpoints:
@@ -146,7 +146,7 @@ class ScalerUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _describe_architecture(coefs: List, intercepts: List) -> str:
-    """Return a human-readable MLP architecture string, e.g. '18→64→64→11'."""
+    """Return a human-readable MLP architecture string, e.g. '25→100→50→9'."""
     if not coefs:
         return "N/A"
     input_dim = len(coefs[0][0])
@@ -532,7 +532,7 @@ async def detailed_status():
             "expected_clients": EXPECTED_CLIENTS,
             "algorithm": "FedAvg",
             "model_type": "MLP Classifier (sklearn)",
-            "task": "11-class Cyber Intrusion Detection",
+            "task": "9-class Cyber Intrusion Detection",
             "deployment": "Oracle Cloud / Render",
         },
         "current_round": round_number,

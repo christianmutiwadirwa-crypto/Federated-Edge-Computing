@@ -59,8 +59,8 @@ class DataTamperingExperiment(BaseExperiment):
 
     def initialize(self) -> None:
         cfg = self.config.get("fuzzing", {})
-        self.num_packets = cfg.get("num_packets", 100)
-        self.interval_ms = cfg.get("interval_ms", 100)
+        self.num_packets = cfg.get("num_packets", 1000)
+        self.interval_ms = cfg.get("interval_ms", 10)
         self.min_size = cfg.get("min_size", 10)
         self.max_size = cfg.get("max_size", 300)
         self.target_ip = self.config.get("server_ip", "127.0.0.1")
@@ -94,7 +94,8 @@ class DataTamperingExperiment(BaseExperiment):
             return
 
         interval_sec = self.interval_ms / 1000.0
-        fuzz_types = ["random", "correct_size_random", "almost_valid", "zero", "oversized"]
+        # Exclusively send packets that are structurally valid but have deliberately wrong CRCs
+        fuzz_types = ["almost_valid"]
         
         start_time = time.time()
         i = 0

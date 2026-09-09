@@ -1,12 +1,12 @@
 """
 =============================================================================
  train_node1_8classes_torch.py
- Federated Learning Node 1 — PyTorch Training Pipeline (8 Classes, Cyber-Only)
+ Federated Learning Node 1 — PyTorch Training Pipeline (7 Classes, Cyber-Only)
 =============================================================================
  Class-Aware Federated Learning with Global Knowledge Preservation.
 
  Key mechanisms:
-   1. Output neuron freezing   : gradients for Replay/PacketInjection/SlowDoS
+   1. Output neuron freezing   : gradients for PacketInjection/SlowDoS
                                  are zeroed before the optimiser step.
    2. Knowledge distillation   : hidden layers are penalised for drifting from
                                  the teacher (global) model's soft predictions.
@@ -59,33 +59,30 @@ DEFAULT_OUTPUT_DIR  = Path(__file__).resolve().parent.parent / "models"
 
 RANDOM_STATE  = 42
 TEST_SIZE     = 0.20
-LOCAL_EPOCHS  = 1          # Critical: 1 epoch prevents catastrophic forgetting
+LOCAL_EPOCHS  = 10         # Critical: 1 epoch prevents catastrophic forgetting, but 10 for diagnosis
 BATCH_SIZE    = 256
 LEARNING_RATE = 1e-3
 LAMBDA_KD     = 0.5        # Knowledge distillation weight
 MU_PROX       = 0.01       # FedProx proximal weight
 KD_TEMP       = 3.0        # Knowledge distillation temperature
 
-# Global 11-class schema — output layer fixed at 11 neurons for FL compatibility
+# Global 9-class schema — output layer fixed at 9 neurons for FL compatibility
 GLOBAL_CLASSES = {
     "ConnectionResetExperiment": 0,
-    "DataTamperingExperiment":   1,
-    "DelayExperiment":           2,
-    "DeviceSpoofExperiment":     3,
-    "DuplicatePacketExperiment": 4,
-    "FloodingExperiment":        5,
-    "Normal":                    6,
-    "PacketInjectionExperiment": 7,
-    "PacketLossExperiment":      8,
-    "ReplayExperiment":          9,
-    "SlowDoSExperiment":         10,
+    "DelayExperiment":           1,
+    "DeviceSpoofExperiment":     2,
+    "DuplicatePacketExperiment": 3,
+    "FloodingExperiment":        4,
+    "Normal":                    5,
+    "PacketInjectionExperiment": 6,
+    "PacketLossExperiment":      7,
+    "SlowDoSExperiment":         8,
 }
 
-# 8 classes Node 1 trains on (excludes Replay, PacketInjection, SlowDoS)
+# 7 classes Node 1 trains on (excludes Replay, PacketInjection, SlowDoS, DataTampering)
 ALLOWED_CLASSES = [
     "Normal",
     "FloodingExperiment",
-    "DataTamperingExperiment",
     "DeviceSpoofExperiment",
     "DelayExperiment",
     "ConnectionResetExperiment",
@@ -100,7 +97,8 @@ ALLOWED_CLASSES = [
 
 def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
     """Load cyber_data.csv files only — physical data intentionally excluded."""
-    cyber_files = sorted(results_dir.rglob("cyber_data.csv"))
+    cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
+    cyber_files = sorted(cyber_files)
     if not cyber_files:
         raise FileNotFoundError(f"No cyber_data.csv files found under: {results_dir}")
 
@@ -124,14 +122,12 @@ def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
     master["AttackLabel"] = master["AttackLabel"].replace("NormalExperiment", "Normal")
     print(f"\n  Total rows before class filter: {len(master)}")
 
-    # Noise cleaning — same logic as original script
+    # Noise cleaning
     clean_masks = [master["AttackLabel"] == "Normal"]
-    dt_mask = (master["AttackLabel"] == "DataTamperingExperiment") & \
-              ((master["crc_failure_count"] > 0) | (master["invalid_packet_count"] > 0))
-    clean_masks.append(dt_mask)
     other_attacks = master["AttackLabel"].isin([
-        "DelayExperiment", "ConnectionResetExperiment", "DuplicatePacketExperiment",
-        "FloodingExperiment", "DeviceSpoofExperiment", "PacketLossExperiment",
+        "DelayExperiment", "ConnectionResetExperiment", 
+        "DuplicatePacketExperiment", "FloodingExperiment", 
+        "DeviceSpoofExperiment", "PacketLossExperiment",
     ])
     clean_masks.append(other_attacks & (master["total_packets"] > 2))
     final_mask = pd.concat(clean_masks, axis=1).any(axis=1)
@@ -139,7 +135,7 @@ def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
 
     # Filter to Node 1's allowed classes
     master = master[master["AttackLabel"].isin(ALLOWED_CLASSES)]
-    print(f"  Rows after filtering to 8 classes: {len(master)}")
+    print(f"  Rows after filtering to 7 classes: {len(master)}")
     print(f"\n  Class distribution:\n{master['AttackLabel'].value_counts().to_string()}")
     return master
 
@@ -176,7 +172,7 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
     X = df.drop(columns=["AttackLabel"])
     feature_names = list(X.columns)
 
-    # Map string labels → global integer schema
+    # Map string labels -> global integer schema
     y_encoded = df["AttackLabel"].map(GLOBAL_CLASSES).values
 
     # Record class counts BEFORE SMOTE for FL server-side weighting
@@ -184,12 +180,21 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
     for label_int in y_encoded:
         class_counts[int(label_int)] += 1
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_encoded,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
-        stratify=y_encoded,
-    )
+    # Chronological split per class to avoid time-series leakage
+    X_train_list, X_test_list, y_train_list, y_test_list = [], [], [], []
+    for c in np.unique(y_encoded):
+        idx = np.where(y_encoded == c)[0]
+        split_point = int(len(idx) * (1 - TEST_SIZE))
+        train_idx, test_idx = idx[:split_point], idx[split_point:]
+        X_train_list.append(X.iloc[train_idx])
+        X_test_list.append(X.iloc[test_idx])
+        y_train_list.append(y_encoded[train_idx])
+        y_test_list.append(y_encoded[test_idx])
+    
+    X_train = pd.concat(X_train_list)
+    X_test  = pd.concat(X_test_list)
+    y_train = np.concatenate(y_train_list)
+    y_test  = np.concatenate(y_test_list)
 
     # ---- Scaler Init Phase ------------------------------------------------
     if init_scaler_only:
@@ -220,7 +225,7 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
     all_class_ids    = set(range(len(GLOBAL_CLASSES)))
     missing_classes  = all_class_ids - local_class_ids
     print(f"\n  Local classes   : {sorted(local_class_ids)}")
-    print(f"  Missing classes : {sorted(missing_classes)}  ← these neurons will be frozen")
+    print(f"  Missing classes : {sorted(missing_classes)}  <- these neurons will be frozen")
 
     input_dim = X_train_scaled.shape[1]
 
@@ -231,7 +236,7 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
         student = load_model(model_pth)
     else:
         print("\n  No global model found — initialising new PyTorch MLP from scratch...")
-        student = FederatedMLP(input_dim=input_dim, hidden_sizes=(100, 50), num_classes=11)
+        student = FederatedMLP(input_dim=input_dim, hidden_sizes=(100, 50), num_classes=9)
 
     # Build teacher — a frozen copy of the global model for knowledge distillation
     if model_pth.exists():
@@ -335,7 +340,7 @@ def save_artifacts(model, scaler, le, feature_names, class_counts, output_dir: P
         json.dump(class_counts, f)
 
     print(f"\n  Saved: fused_ids_model.pth, scaler.pkl, label_encoder.pkl, "
-          f"feature_columns.pkl, class_counts.json → {output_dir}")
+          f"feature_columns.pkl, class_counts.json -> {output_dir}")
 
 
 # ---------------------------------------------------------------------------
@@ -343,7 +348,7 @@ def save_artifacts(model, scaler, le, feature_names, class_counts, output_dir: P
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Node 1 PyTorch MLP (8 classes, cyber-only)")
+    parser = argparse.ArgumentParser(description="Train Node 1 PyTorch MLP (7 classes, cyber-only)")
     parser.add_argument("--results-dir",    type=Path, default=DEFAULT_RESULTS_DIR)
     parser.add_argument("--output-dir",     type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--init-scaler-only", action="store_true",
@@ -351,7 +356,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 65)
-    print(" Node 1 Training: Class-Aware PyTorch MLP (8 classes, 11 neurons)")
+    print(" Node 1 Training: Class-Aware PyTorch MLP (7 classes, 9 neurons)")
     print(f" Results dir: {args.results_dir}")
     print(f" Output dir:  {args.output_dir}")
     print(f" Started:     {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -378,7 +383,7 @@ def main():
     print("\n" + "=" * 65)
     print(f" Training Complete! Final accuracy: {acc * 100:.2f}%")
     print(f" Model type: Class-Aware PyTorch MLP (frozen output neurons for unseen classes)")
-    print(f" Compatible with FL server (11-neuron output layer)")
+    print(f" Compatible with FL server (9-neuron output layer)")
     print("=" * 65)
 
 
