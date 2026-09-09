@@ -125,9 +125,11 @@ class FederatedClient:
 
             # Slow path: first time — fit local, upload, wait
             print("     Fitting local scaler on raw data...")
+            train_script = BASE_DIR / "network_analysis" / ("train_node2_8classes_torch.py" if self.node_id == "edge_node_2" else "train_node1_8classes_torch.py")
             subprocess.run(
-                [sys.executable, str(TRAIN_SCRIPT), "--init-scaler-only"],
-                check=True, capture_output=True, text=True
+                ["python", str(train_script), "--init-scaler-only"],
+                check=True,
+                capture_output=True
             )
             
             # Extract local scaler stats
@@ -174,8 +176,9 @@ class FederatedClient:
         try:
             # We run it as a subprocess to keep the training memory separate
             # from the long-running inference process.
+            train_script = BASE_DIR / "network_analysis" / ("train_node2_8classes_torch.py" if self.node_id == "edge_node_2" else "train_node1_8classes_torch.py")
             result = subprocess.run(
-                ["python", str(TRAIN_SCRIPT)],
+                ["python", str(train_script)],
                 check=True,
                 capture_output=True,
                 text=True
