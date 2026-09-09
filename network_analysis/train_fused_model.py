@@ -68,6 +68,9 @@ def load_fused_dataset(results_dir: Path, exclude_eval: bool = True) -> pd.DataF
         cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
     else:
         cyber_files = list(results_dir.rglob("cyber_data.csv"))
+        
+    # Hard drop dropped classes so they don't even log
+    cyber_files = [f for f in cyber_files if "DataTampering" not in str(f) and "Replay" not in str(f)]
     cyber_files = sorted(cyber_files)
     if not cyber_files:
         raise FileNotFoundError(f"No cyber_data.csv files found under: {results_dir}")

@@ -92,6 +92,7 @@ DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
 
 def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
     cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
+    cyber_files = [f for f in cyber_files if "DataTampering" not in str(f) and "Replay" not in str(f)]
     cyber_files = sorted(cyber_files)
     if not cyber_files:
         raise FileNotFoundError(f"No cyber_data.csv files found under: {results_dir}")
