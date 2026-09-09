@@ -117,6 +117,37 @@ class FeatureTransformer:
         # Preserve AttackLabel before dropping metadata
         labels = df["AttackLabel"].copy() if "AttackLabel" in df.columns else None
 
+        # ------------------------------------------------------------------
+        # Derived features — normalise for cross-experiment sniffer variance.
+        # DO NOT REMOVE — Node 2 depends on these for FedAvg weight alignment.
+        # ------------------------------------------------------------------
+        tp = df["total_packets"].replace(0, np.nan)  # avoid divide-by-zero
+
+        # 1. Merged anomaly count: captures duplicate/out-of-order packets
+        #    regardless of which raw column the sniffer chose to populate.
+        if "duplicate_packet_count" in df.columns and "out_of_order_packet_count" in df.columns:
+            df["anomaly_packet_count"] = (
+                df["duplicate_packet_count"] + df["out_of_order_packet_count"]
+            )
+            df["anomaly_packet_rate"] = (df["anomaly_packet_count"] / tp).fillna(0.0)
+
+        # 2. Sequence gap rate — normalise by total packets so SlowDoS and
+        #    PacketInjection are distinguishable even when experiment duration
+        #    differs between runs.
+        if "sequence_number_gap" in df.columns:
+            df["sequence_gap_rate"] = (df["sequence_number_gap"] / tp).fillna(0.0)
+
+        # 3. Slowness score — product of inter-arrival time and packet rate.
+        #    Should be ~1 for normal flows; deviates strongly for SlowDoS.
+        if "mean_interarrival_time" in df.columns and "packet_rate" in df.columns:
+            df["slowness_score"] = (
+                df["mean_interarrival_time"] * df["packet_rate"]
+            ).fillna(0.0)
+
+        # 4. Bytes per packet — compact size signature used by PacketInjection.
+        if "total_bytes" in df.columns:
+            df["bytes_per_packet"] = (df["total_bytes"] / tp).fillna(0.0)
+
         # Drop all metadata columns (ignore missing ones silently)
         cols_to_drop = [c for c in CYBER_METADATA_COLS + PHYSICAL_METADATA_COLS
                         if c in df.columns]

@@ -83,6 +83,8 @@ ALLOWED_CLASSES = [
     "FloodingExperiment",
 ]
 
+# Classes permanently dropped from federation (neither node has reliable data)
+DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
 
 # ---------------------------------------------------------------------------
 # Step 1: Load Dataset

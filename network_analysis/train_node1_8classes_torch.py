@@ -79,7 +79,7 @@ GLOBAL_CLASSES = {
     "SlowDoSExperiment":         8,
 }
 
-# 7 classes Node 1 trains on (excludes Replay, PacketInjection, SlowDoS, DataTampering)
+# 7 classes Node 1 trains on (excludes PacketInjection, SlowDoS, DataTampering, Replay)
 ALLOWED_CLASSES = [
     "Normal",
     "FloodingExperiment",
@@ -90,6 +90,8 @@ ALLOWED_CLASSES = [
     "PacketLossExperiment",
 ]
 
+# Classes permanently dropped from federation (neither node has reliable data)
+DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
 
 # ---------------------------------------------------------------------------
 # Step 1: Load Dataset
