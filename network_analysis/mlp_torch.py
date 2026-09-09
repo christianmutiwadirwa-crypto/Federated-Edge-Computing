@@ -66,7 +66,7 @@ class FederatedMLP(nn.Module):
         def weight_hook(grad: torch.Tensor) -> torch.Tensor:
             g = grad.clone()
             for c in frozen:
-                g[:, c] = 0.0   # shape: (hidden, num_classes) → zero column c
+                g[c, :] = 0.0   # shape: (num_classes, hidden) → zero row c
             return g
 
         def bias_hook(grad: torch.Tensor) -> torch.Tensor:
