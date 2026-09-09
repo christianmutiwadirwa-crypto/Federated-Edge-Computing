@@ -58,13 +58,16 @@ TEST_SIZE           = 0.20
 # Step 1: Load and Fuse Data
 # ---------------------------------------------------------------------------
 
-def load_fused_dataset(results_dir: Path) -> pd.DataFrame:
+def load_fused_dataset(results_dir: Path, exclude_eval: bool = True) -> pd.DataFrame:
     """
     Recursively find all cyber_data.csv + physical_data.csv pairs under
     results_dir, apply sensor fusion via merge_asof, and return one unified
     DataFrame with all experiments concatenated.
     """
-    cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
+    if exclude_eval:
+        cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
+    else:
+        cyber_files = list(results_dir.rglob("cyber_data.csv"))
     cyber_files = sorted(cyber_files)
     if not cyber_files:
         raise FileNotFoundError(f"No cyber_data.csv files found under: {results_dir}")

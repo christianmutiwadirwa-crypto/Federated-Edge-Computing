@@ -53,7 +53,7 @@ DEFAULT_OUTPUT_DIR  = Path(__file__).resolve().parent.parent / "models"
 
 RANDOM_STATE  = 42
 TEST_SIZE     = 0.20
-LOCAL_EPOCHS  = 1
+LOCAL_EPOCHS  = 5
 BATCH_SIZE    = 256
 LEARNING_RATE = 1e-3
 LAMBDA_KD     = 0.5

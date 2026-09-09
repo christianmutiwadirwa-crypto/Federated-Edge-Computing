@@ -43,7 +43,7 @@ def test_model(model_path: Path, results_dir: Path, output_json: Path, models_di
 
     # Load and prepare data
     try:
-        master_df   = load_fused_dataset(results_dir)
+        master_df   = load_fused_dataset(results_dir, exclude_eval=False)
         featured_df = engineer_features(master_df)
     except Exception as e:
         print(f"[!] Failed to load dataset: {e}")
