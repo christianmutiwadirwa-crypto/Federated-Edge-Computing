@@ -152,6 +152,7 @@ def federated_loss(
     teacher_logits:  torch.Tensor,
     student_params:  list,
     global_params:   list,
+    missing_classes: set,
     lambda_kd: float = 0.5,
     mu:        float = 0.01,
     T:         float = 3.0,
@@ -171,12 +172,14 @@ def federated_loss(
     # 1. Standard cross-entropy
     ce = F.cross_entropy(student_logits, labels)
 
-    # 2. Knowledge distillation (soft label matching with temperature T)
-    kd = F.kl_div(
-        F.log_softmax(student_logits / T, dim=1),
-        F.softmax(teacher_logits / T, dim=1).detach(),
-        reduction="batchmean",
-    ) * (T ** 2)
+    # 2. Masked Knowledge Distillation
+    # Only penalize the student for drifting on classes it has no local data for.
+    # For its own classes, it should trust its ground-truth labels (CE loss) completely.
+    kd = 0.0
+    if missing_classes:
+        missing_idx = list(missing_classes)
+        # We use MSE on the raw logits of the missing classes to anchor them to the global model
+        kd = F.mse_loss(student_logits[:, missing_idx], teacher_logits[:, missing_idx].detach())
 
     # 3. FedProx proximal term
     prox = sum(

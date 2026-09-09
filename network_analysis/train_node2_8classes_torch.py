@@ -250,6 +250,7 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
                 loss = federated_loss(
                     student_logits, y_batch, teacher_logits,
                     list(student.parameters()), global_params,
+                    missing_classes=missing_classes,
                     lambda_kd=LAMBDA_KD, mu=MU_PROX, T=KD_TEMP,
                 )
             else:

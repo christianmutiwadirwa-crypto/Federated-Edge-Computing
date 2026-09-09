@@ -183,6 +183,11 @@ async def run_fedavg() -> None:
         num_coef_layers = len(sample_update["coefs"])
         num_intercept_layers = len(sample_update["intercepts"])
 
+        total_samples = sum(
+            pending_updates[nid].get("training_samples") or 0
+            for nid in node_ids
+        )
+
         new_coefs = []
         new_intercepts = []
 
@@ -211,8 +216,14 @@ async def run_fedavg() -> None:
                         for i, nid in enumerate(node_ids):
                             avg_layer[:, c] += layer_arrays[i][:, c] / num_clients
             else:
-                # Standard average for hidden layers
-                avg_layer = np.mean(layer_arrays, axis=0)
+                # Sample-weighted average for hidden layers
+                if total_samples > 0:
+                    avg_layer = sum(
+                        layer_arrays[i] * ((pending_updates[nid].get("training_samples") or 0) / total_samples)
+                        for i, nid in enumerate(node_ids)
+                    )
+                else:
+                    avg_layer = np.mean(layer_arrays, axis=0)
                 
             new_coefs.append(avg_layer.tolist())
 
@@ -241,7 +252,14 @@ async def run_fedavg() -> None:
                         for i, nid in enumerate(node_ids):
                             avg_layer[c] += layer_arrays[i][c] / num_clients
             else:
-                avg_layer = np.mean(layer_arrays, axis=0)
+                # Sample-weighted average for hidden layers
+                if total_samples > 0:
+                    avg_layer = sum(
+                        layer_arrays[i] * ((pending_updates[nid].get("training_samples") or 0) / total_samples)
+                        for i, nid in enumerate(node_ids)
+                    )
+                else:
+                    avg_layer = np.mean(layer_arrays, axis=0)
                 
             new_intercepts.append(avg_layer.tolist())
 
@@ -260,10 +278,7 @@ async def run_fedavg() -> None:
         if acc_values:
             avg_accuracy = round(float(np.mean(acc_values)), 4)
 
-        total_samples = sum(
-            pending_updates[nid].get("training_samples") or 0
-            for nid in node_ids
-        )
+        # total_samples is computed at the top of the function now
 
         # Update Global State
         global_model["coefs"] = new_coefs
