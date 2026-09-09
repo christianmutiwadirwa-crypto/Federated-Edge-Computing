@@ -199,7 +199,9 @@ class FederatedClient:
             class_counts_path = MODELS_DIR / "class_counts.json"
             if class_counts_path.exists():
                 with open(class_counts_path, "r") as f:
-                    weights["class_counts"] = json.load(f)
+                    counts = json.load(f)
+                    weights["class_counts"] = counts
+                    weights["training_samples"] = sum(counts)
 
             weights["node_id"]       = self.node_id
             weights["architecture"]  = "→".join(
