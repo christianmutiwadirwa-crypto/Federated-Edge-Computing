@@ -118,7 +118,9 @@ class FederatedClient:
                 scaler.mean_ = np.array(data["scaler_mean"])
                 scaler.var_  = np.array(data["scaler_var"])
                 scaler.n_samples_seen_ = data["scaler_samples"]
-                scaler.scale_ = np.sqrt(scaler.var_)
+                scale = np.sqrt(scaler.var_)
+                scale[scale == 0.0] = 1.0
+                scaler.scale_ = scale
                 joblib.dump(scaler, MODELS_DIR / "scaler.pkl")
                 print("     Global Scaler already exists — downloaded and locked.")
                 return True
@@ -157,7 +159,9 @@ class FederatedClient:
                     scaler.mean_ = np.array(data["scaler_mean"])
                     scaler.var_ = np.array(data["scaler_var"])
                     scaler.n_samples_seen_ = data["scaler_samples"]
-                    scaler.scale_ = np.sqrt(scaler.var_)
+                    scale = np.sqrt(scaler.var_)
+                    scale[scale == 0.0] = 1.0
+                    scaler.scale_ = scale
                     joblib.dump(scaler, MODELS_DIR / "scaler.pkl")
                     print("     Global Scaler downloaded and locked.")
                     return True
