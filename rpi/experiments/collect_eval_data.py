@@ -8,15 +8,12 @@ def main():
     config_path = "config/config.json"
     eval_config_path = "config/eval_config.json"
     
-    # 90 minutes = 5400 seconds
-    # Total time per experiment = 5400 / num_experiments
     pre_duration = 30.0
     post_duration = 30.0
-    # attack_duration will be calculated later once config is loaded
+    attack_duration = 600.0 # 10 minutes per attack
     
     print("=====================================================")
     print(" Starting Evaluation Data Collection Scheduler")
-    print(f" Total Duration: 90 Minutes")
     print(f" Output Directory: results/evaluation")
     print("=====================================================")
     
@@ -37,10 +34,11 @@ def main():
         return
         
     num_experiments = len(experiments)
-    total_time_per_exp = 5400.0 / num_experiments
-    attack_duration = total_time_per_exp - pre_duration - post_duration
+    total_time_per_exp = pre_duration + attack_duration + post_duration
+    total_duration_mins = (num_experiments * total_time_per_exp) / 60.0
     
     print(f"[*] Found {num_experiments} experiments. Setting attack duration to {attack_duration:.1f}s each.")
+    print(f"[*] Total estimated runtime: ~{total_duration_mins:.1f} minutes.")
         
     for exp_key in experiments:
         experiments[exp_key]["pre_attack_duration"] = pre_duration
