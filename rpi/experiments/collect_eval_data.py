@@ -62,12 +62,16 @@ def main():
         print(f"\n[{i}/{len(exp_keys)}] Running {exp_name}...")
         try:
             # We use python main.py --experiment XXX --config config/eval_config.json
+            # Add a 5-minute safety buffer timeout to prevent hanging.
             subprocess.run(
                 ["python", "main.py", "--experiment", exp_name, "--config", eval_config_path],
-                check=True
+                check=True,
+                timeout=total_time_per_exp + 300
             )
         except subprocess.CalledProcessError:
             print(f"[!] Error: Experiment {exp_name} failed. Continuing to next...")
+        except subprocess.TimeoutExpired:
+            print(f"[!] Critical: Experiment {exp_name} hung and timed out. Force killed. Continuing...")
         except KeyboardInterrupt:
             print("\n[!] Collection aborted by user.")
             break

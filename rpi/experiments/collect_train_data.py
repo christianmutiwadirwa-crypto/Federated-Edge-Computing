@@ -61,17 +61,22 @@ def main():
         duration = exp_config.get("attack_duration", 1800.0)
         pre = exp_config.get("pre_attack_duration", 30.0)
         post = exp_config.get("post_attack_duration", 30.0)
-        total_time = (duration + pre + post) / 60.0
+        total_time_seconds = duration + pre + post
+        total_time = total_time_seconds / 60.0
         
         print(f"\n[{i}/{len(batch_experiments)}] Running {exp_name} (~{total_time:.1f} mins)...")
         try:
-            # Run main.py using standard config
+            # Run main.py using standard config. 
+            # Add a 5-minute safety buffer timeout to prevent overnight hanging.
             subprocess.run(
                 ["python", "main.py", "--experiment", exp_name, "--config", str(config_path)],
-                check=True
+                check=True,
+                timeout=total_time_seconds + 300
             )
         except subprocess.CalledProcessError:
             print(f"[!] Error: Experiment {exp_name} failed. Continuing to next...")
+        except subprocess.TimeoutExpired:
+            print(f"[!] Critical: Experiment {exp_name} hung and timed out. Force killed. Continuing...")
         except KeyboardInterrupt:
             print("\n[!] Collection aborted by user.")
             break
