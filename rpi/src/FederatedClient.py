@@ -43,9 +43,9 @@ NODE_ID = os.environ.get("NODE_ID", "edge_node_1")
 
 # Paths
 BASE_DIR      = Path(__file__).resolve().parent.parent.parent
-MODELS_DIR    = BASE_DIR / "models"
+MODELS_DIR    = BASE_DIR / f"models_{NODE_ID}"
 MODEL_PATH    = MODELS_DIR / "fused_ids_model.pth"      # PyTorch checkpoint
-TRAIN_SCRIPT  = BASE_DIR / "network_analysis" / "train_node1_8classes_torch.py"
+TRAIN_SCRIPT  = BASE_DIR / "network_analysis" / "train_federated_node.py"
 
 # PyTorch mlp_torch is in the network_analysis directory
 import sys as _sys
@@ -127,9 +127,8 @@ class FederatedClient:
 
             # Slow path: first time — fit local, upload, wait
             print("     Fitting local scaler on raw data...")
-            train_script = BASE_DIR / "network_analysis" / ("train_node2_8classes_torch.py" if self.node_id == "edge_node_2" else "train_node1_8classes_torch.py")
             subprocess.run(
-                ["python", str(train_script), "--init-scaler-only"],
+                ["python", str(TRAIN_SCRIPT), "--node-id", self.node_id, "--output-dir", str(MODELS_DIR), "--init-scaler-only"],
                 check=True,
                 capture_output=True
             )
@@ -176,16 +175,13 @@ class FederatedClient:
 
     def _train_local_model(self) -> bool:
         """Run the training script as a subprocess."""
-        print("  -> Step 1: Training local MLP on local dataset...")
+        print(f"  -> Step 1: Training local MLP on local dataset...")
         try:
             # We run it as a subprocess to keep the training memory separate
             # from the long-running inference process.
-            train_script = BASE_DIR / "network_analysis" / ("train_node2_8classes_torch.py" if self.node_id == "edge_node_2" else "train_node1_8classes_torch.py")
-            result = subprocess.run(
-                ["python", str(train_script)],
-                check=True,
-                capture_output=True,
-                text=True
+            subprocess.run(
+                ["python", str(TRAIN_SCRIPT), "--node-id", self.node_id, "--output-dir", str(MODELS_DIR)],
+                check=True
             )
             print("     Local training complete.")
             return True
@@ -211,7 +207,7 @@ class FederatedClient:
                     weights["training_samples"] = sum(counts)
 
             weights["node_id"]       = self.node_id
-            weights["architecture"]  = "→".join(
+            weights["architecture"]  = "->".join(
                 str(x) for x in
                 [model.input_dim] + list(model.hidden_sizes) + [model.num_classes]
             )
@@ -225,6 +221,14 @@ class FederatedClient:
     def _submit_weights(self, weights: dict) -> int:
         """POST weights to the central FL server."""
         print(f"  -> Step 3: Submitting updates to FL Server ({self.server_url})...")
+        
+        fisher_path = MODELS_DIR / "fisher_diagonals.json"
+        if fisher_path.exists():
+            with open(fisher_path, "r") as f:
+                fisher = json.load(f)
+                weights["fisher_coefs"] = fisher.get("fisher_coefs")
+                weights["fisher_intercepts"] = fisher.get("fisher_intercepts")
+
         try:
             response = requests.post(f"{self.server_url}/submit_update", json=weights)
             if response.status_code == 200:
@@ -252,8 +256,17 @@ class FederatedClient:
                     current_round = data.get("round", 0)
                     
                     if current_round >= target_round:
+                        weights = data.get("weights")
+                        client_states = data.get("client_states", {})
+                        
+                        with open(MODELS_DIR / "global_weights.json", "w") as f:
+                            json.dump(weights, f)
+                            
+                        with open(MODELS_DIR / "client_states.json", "w") as f:
+                            json.dump(client_states, f)
+                            
                         print(f"     Global model for Round {current_round} received!")
-                        return data.get("weights")
+                        return weights
                         
             except requests.RequestException:
                 pass # Silently ignore connection errors while polling

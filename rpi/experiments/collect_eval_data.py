@@ -9,11 +9,10 @@ def main():
     eval_config_path = "config/eval_config.json"
     
     # 90 minutes = 5400 seconds
-    # 11 experiments total
-    # Total time per experiment = 5400 / 11 = ~491 seconds
+    # Total time per experiment = 5400 / num_experiments
     pre_duration = 30.0
     post_duration = 30.0
-    attack_duration = 431.0 # 491 - 30 - 30 = 431
+    # attack_duration will be calculated later once config is loaded
     
     print("=====================================================")
     print(" Starting Evaluation Data Collection Scheduler")
@@ -36,6 +35,12 @@ def main():
     if not experiments:
         print("[!] Error: No experiments found in config.")
         return
+        
+    num_experiments = len(experiments)
+    total_time_per_exp = 5400.0 / num_experiments
+    attack_duration = total_time_per_exp - pre_duration - post_duration
+    
+    print(f"[*] Found {num_experiments} experiments. Setting attack duration to {attack_duration:.1f}s each.")
         
     for exp_key in experiments:
         experiments[exp_key]["pre_attack_duration"] = pre_duration

@@ -18,4 +18,4 @@ scratch_cm.py
 metrics.json
 *.log
 **/physical_data.csv
-**/cyber_data.csv
+**/cyber_data.csvarchive_pre_flow_labels/

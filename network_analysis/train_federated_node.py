@@ -1,18 +1,23 @@
 """
 =============================================================================
- train_node2_8classes_torch.py
- Federated Learning Node 2 — PyTorch Training Pipeline (7 Classes, Cyber-Only)
+ train_node1_8classes_torch.py
+ Federated Learning Node 1 — PyTorch Training Pipeline (7 Classes, Cyber-Only)
 =============================================================================
- Identical architecture to Node 1 but trained on Node 2's class subset:
-   Includes: Normal, SlowDoS, PacketInjection,
-             DeviceSpoof, PacketLoss, DuplicatePacket, Flooding
-   Missing : ConnectionReset, Delay  <- frozen output neurons
+ Class-Aware Federated Learning with Global Knowledge Preservation.
 
  Key mechanisms:
-   1. Output neuron freezing   : gradients for ConnectionReset/Delay
+   1. Output neuron freezing   : gradients for PacketInjection/SlowDoS
                                  are zeroed before the optimiser step.
-   2. Knowledge distillation   : hidden layers preserve global model logic.
-   3. FedProx regularisation   : limits weight drift from the global baseline.
+   2. Knowledge distillation   : hidden layers are penalised for drifting from
+                                 the teacher (global) model's soft predictions.
+   3. FedProx regularisation   : a proximal term limits total weight drift.
+
+ Outputs:
+   models/fused_ids_model.pth   — PyTorch checkpoint (weights + arch metadata)
+   models/class_counts.json     — per-class sample counts for FL server
+   models/scaler.pkl            — unchanged (global scaler already synced)
+   models/label_encoder.pkl     — unchanged
+   models/feature_columns.pkl   — unchanged
 =============================================================================
 """
 
@@ -34,6 +39,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from imblearn.over_sampling import SMOTE
 
+# FeatureTransformer and mlp_torch live alongside this script
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "rpi" / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -53,13 +59,15 @@ DEFAULT_OUTPUT_DIR  = Path(__file__).resolve().parent.parent / "models"
 
 RANDOM_STATE  = 42
 TEST_SIZE     = 0.20
-LOCAL_EPOCHS  = 5
+LOCAL_EPOCHS  = 1
 BATCH_SIZE    = 256
 LEARNING_RATE = 1e-3
-LAMBDA_KD     = 0.5
-MU_PROX       = 0.01
-KD_TEMP       = 3.0
+LAMBDA_KD     = 0.5        # Knowledge distillation weight
+MU_PROX       = 0.01       # FedProx proximal weight
+KD_TEMP       = 3.0        # Knowledge distillation temperature
+LAMBDA_FEDCURV = 1.0       # FedCurv Fisher-weighted penalty
 
+# Global 9-class schema — output layer fixed at 9 neurons for FL compatibility
 GLOBAL_CLASSES = {
     "ConnectionResetExperiment": 0,
     "DelayExperiment":           1,
@@ -72,16 +80,26 @@ GLOBAL_CLASSES = {
     "SlowDoSExperiment":         8,
 }
 
-# 7 classes Node 2 trains on (excludes ConnectionReset, Delay, DataTampering, Replay)
-ALLOWED_CLASSES = [
-    "Normal",
-    "SlowDoSExperiment",
-    "PacketInjectionExperiment",
-    "DeviceSpoofExperiment",
-    "PacketLossExperiment",
-    "DuplicatePacketExperiment",
-    "FloodingExperiment",
-]
+NODE_CLASSES = {
+    "edge_node_1": [
+        "Normal",
+        "FloodingExperiment",
+        "DeviceSpoofExperiment",
+        "DelayExperiment",
+        "ConnectionResetExperiment",
+        "DuplicatePacketExperiment",
+        "PacketLossExperiment",
+    ],
+    "edge_node_2": [
+        "Normal",
+        "SlowDoSExperiment",
+        "PacketInjectionExperiment",
+        "DeviceSpoofExperiment",
+        "PacketLossExperiment",
+        "DuplicatePacketExperiment",
+        "FloodingExperiment",
+    ]
+}
 
 # Classes permanently dropped from federation (neither node has reliable data)
 DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
@@ -90,7 +108,8 @@ DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
 # Step 1: Load Dataset
 # ---------------------------------------------------------------------------
 
-def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
+def load_cyber_only_dataset(results_dir: Path, node_id: str) -> pd.DataFrame:
+    """Load cyber_data.csv files only — physical data intentionally excluded."""
     cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
     cyber_files = [f for f in cyber_files if "DataTampering" not in str(f) and "Replay" not in str(f)]
     cyber_files = sorted(cyber_files)
@@ -120,16 +139,26 @@ def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
     # Noise cleaning
     clean_masks = [master["AttackLabel"] == "Normal"]
     other_attacks = master["AttackLabel"].isin([
-        "SlowDoSExperiment", "PacketInjectionExperiment",
-        "DeviceSpoofExperiment", "PacketLossExperiment", 
-        "DuplicatePacketExperiment", "FloodingExperiment",
+        "DelayExperiment", "ConnectionResetExperiment", 
+        "DuplicatePacketExperiment", "FloodingExperiment", 
+        "DeviceSpoofExperiment", "PacketLossExperiment",
+        "SlowDoSExperiment"
     ])
     clean_masks.append(other_attacks & (master["total_packets"] > 2))
+    
+    # Packet Injection typically only uses 1 or 2 packets, so it must not be filtered by packet count
+    clean_masks.append(master["AttackLabel"] == "PacketInjectionExperiment")
+    
     final_mask = pd.concat(clean_masks, axis=1).any(axis=1)
     master = master[final_mask].reset_index(drop=True)
 
-    master = master[master["AttackLabel"].isin(ALLOWED_CLASSES)]
-    print(f"  Rows after filtering to 7 classes: {len(master)}")
+    # Filter to Node's allowed classes
+    allowed = NODE_CLASSES.get(node_id, [])
+    if not allowed:
+        raise ValueError(f"Unknown node ID: {node_id}")
+        
+    master = master[master["AttackLabel"].isin(allowed)]
+    print(f"  Rows after filtering to {node_id}'s classes: {len(master)}")
     print(f"\n  Class distribution:\n{master['AttackLabel'].value_counts().to_string()}")
     return master
 
@@ -139,6 +168,7 @@ def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def engineer_features(master_df: pd.DataFrame) -> pd.DataFrame:
+    """Run FeatureTransformer and drop any physical columns."""
     transformer = FeatureTransformer()
     transformed = transformer.fit_transform_dataframe(master_df)
     physical_cols = ["AccX", "AccY", "AccZ", "Magnitude", "Timestamp",
@@ -154,14 +184,21 @@ def engineer_features(master_df: pd.DataFrame) -> pd.DataFrame:
 # Step 3: Train
 # ---------------------------------------------------------------------------
 
-def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = None):
+def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output_dir: Path = None):
+    """
+    Full training pipeline.
+    If init_scaler_only=True, only fits the StandardScaler and exits.
+    Otherwise, runs the full PyTorch training loop.
+    """
     from sklearn.preprocessing import StandardScaler
 
     X = df.drop(columns=["AttackLabel"])
     feature_names = list(X.columns)
 
+    # Map string labels -> global integer schema
     y_encoded = df["AttackLabel"].map(GLOBAL_CLASSES).values
 
+    # Record class counts BEFORE SMOTE for FL server-side weighting
     class_counts = [0] * len(GLOBAL_CLASSES)
     for label_int in y_encoded:
         class_counts[int(label_int)] += 1
@@ -182,6 +219,7 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
     y_train = np.concatenate(y_train_list)
     y_test  = np.concatenate(y_test_list)
 
+    # ---- Scaler Init Phase ------------------------------------------------
     if init_scaler_only:
         print("\n  [Scaler Init Phase] Fitting StandardScaler on local raw data...")
         scaler = StandardScaler()
@@ -191,11 +229,13 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
         print(f"  Saved local scaler to {output_dir / 'scaler.pkl'}")
         return None, None, None, None, None, 0.0
 
+    # ---- Training Phase ---------------------------------------------------
     print("\n  [Training Phase] Loading Global Scaler from models/scaler.pkl...")
     scaler = joblib.load(output_dir / "scaler.pkl")
     X_train_scaled = scaler.transform(X_train)
     X_test_scaled  = scaler.transform(X_test)
 
+    # Sanitize NaN/inf from zero-variance features in the Global Scaler
     X_train_scaled = np.nan_to_num(X_train_scaled, nan=0.0, posinf=0.0, neginf=0.0)
     X_test_scaled  = np.nan_to_num(X_test_scaled,  nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -203,15 +243,17 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
     smote = SMOTE(random_state=RANDOM_STATE)
     X_train_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
 
-    local_class_ids = set(int(c) for c in np.unique(y_train_resampled))
-    all_class_ids   = set(range(len(GLOBAL_CLASSES)))
-    missing_classes = all_class_ids - local_class_ids
+    # Identify which global classes are missing locally
+    local_class_ids  = set(int(c) for c in np.unique(y_train_resampled))
+    all_class_ids    = set(range(len(GLOBAL_CLASSES)))
+    missing_classes  = all_class_ids - local_class_ids
     print(f"\n  Local classes   : {sorted(local_class_ids)}")
     print(f"  Missing classes : {sorted(missing_classes)}  <- these neurons will be frozen")
 
     input_dim = X_train_scaled.shape[1]
-    model_pth = output_dir / "fused_ids_model.pth"
 
+    # Build student model — warm-start from global weights if available
+    model_pth = output_dir / "fused_ids_model.pth"
     if model_pth.exists():
         print(f"\n  Loading global model from {model_pth.name} to warm-start training...")
         student = load_model(model_pth)
@@ -219,17 +261,45 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
         print("\n  No global model found — initialising new PyTorch MLP from scratch...")
         student = FederatedMLP(input_dim=input_dim, hidden_sizes=(100, 50), num_classes=9)
 
+    # Build teacher — a frozen copy of the global model for knowledge distillation
     if model_pth.exists():
         teacher = load_model(model_pth)
         teacher.eval()
         for p in teacher.parameters():
             p.requires_grad = False
     else:
-        teacher = None
+        teacher = None  # No global model yet — KD term will be skipped
 
+    # Freeze output gradients for missing classes
     student.register_class_freeze_hooks(missing_classes)
+
+    # Snapshot the global parameters for FedProx
     global_params = [p.detach().clone() for p in student.parameters()]
 
+    # Load other clients' states for FedCurv
+    other_clients_data = []
+    client_states_pth = output_dir / "client_states.json"
+    if client_states_pth.exists():
+        with open(client_states_pth, "r") as f:
+            client_states = json.load(f)
+        for cid, state in client_states.items():
+            if cid == node_id or not state.get("fisher_coefs"):
+                continue
+            
+            cw = []
+            cf = []
+            for i in range(len(state["coefs"])):
+                w = torch.tensor(np.array(state["coefs"][i]), dtype=torch.float32).T
+                b = torch.tensor(np.array(state["intercepts"][i]), dtype=torch.float32)
+                cw.extend([w, b])
+                
+                fw = torch.tensor(np.array(state["fisher_coefs"][i]), dtype=torch.float32).T
+                fb = torch.tensor(np.array(state["fisher_intercepts"][i]), dtype=torch.float32)
+                cf.extend([fw, fb])
+                
+            other_clients_data.append({"weights": cw, "fisher": cf})
+
+    # DataLoader
     X_tensor = torch.tensor(X_train_resampled, dtype=torch.float32)
     y_tensor = torch.tensor(y_train_resampled, dtype=torch.long)
     dataset  = TensorDataset(X_tensor, y_tensor)
@@ -254,9 +324,13 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
                     student_logits, y_batch, teacher_logits,
                     list(student.parameters()), global_params,
                     missing_classes=missing_classes,
-                    lambda_kd=LAMBDA_KD, mu=MU_PROX, T=KD_TEMP,
+                    lambda_kd=LAMBDA_KD,
+                    mu=MU_PROX, T=KD_TEMP,
+                    lambda_fedcurv=LAMBDA_FEDCURV,
+                    other_clients_data=other_clients_data,
                 )
             else:
+                # First round — no global model yet, use plain CE
                 import torch.nn.functional as F
                 loss = F.cross_entropy(student_logits, y_batch)
 
@@ -267,6 +341,27 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
         avg_loss = epoch_loss / len(loader)
         print(f"  Epoch {epoch + 1}/{LOCAL_EPOCHS} — Loss: {avg_loss:.6f}")
 
+    print("\n  [FedCurv] Computing Fisher Information matrix for local weights...")
+    from mlp_torch import compute_fisher_diagonals
+    fisher_diags = compute_fisher_diagonals(student, loader, num_samples=1000)
+    
+    # Format Fisher matrices for FL Server
+    fisher_coefs = []
+    fisher_intercepts = []
+    param_idx = 0
+    for module in student.modules():
+        if isinstance(module, nn.Linear):
+            f_w = fisher_diags[param_idx].cpu().numpy().T.tolist()
+            param_idx += 1
+            f_b = fisher_diags[param_idx].cpu().numpy().tolist()
+            param_idx += 1
+            fisher_coefs.append(f_w)
+            fisher_intercepts.append(f_b)
+            
+    with open(output_dir / "fisher_diagonals.json", "w") as f:
+        json.dump({"fisher_coefs": fisher_coefs, "fisher_intercepts": fisher_intercepts}, f)
+
+    # Evaluate on held-out test set
     student.eval()
     with torch.no_grad():
         X_test_t = torch.tensor(X_test_scaled, dtype=torch.float32)
@@ -301,13 +396,19 @@ def train(df: pd.DataFrame, init_scaler_only: bool = False, output_dir: Path = N
 
 def save_artifacts(model, scaler, le, feature_names, class_counts, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Primary model checkpoint (.pth)
     save_model(model, output_dir / "fused_ids_model.pth",
                extra_meta={"feature_names": feature_names})
+
+    # Keep scaler, label encoder, feature columns as-is (used by test script & inference)
     joblib.dump(scaler,        output_dir / "scaler.pkl")
     joblib.dump(le,            output_dir / "label_encoder.pkl")
     joblib.dump(feature_names, output_dir / "feature_columns.pkl")
+
     with open(output_dir / "class_counts.json", "w") as f:
         json.dump(class_counts, f)
+
     print(f"\n  Saved: fused_ids_model.pth, scaler.pkl, label_encoder.pkl, "
           f"feature_columns.pkl, class_counts.json -> {output_dir}")
 
@@ -317,7 +418,8 @@ def save_artifacts(model, scaler, le, feature_names, class_counts, output_dir: P
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Node 2 PyTorch MLP (7 classes, cyber-only)")
+    parser = argparse.ArgumentParser(description="Train Federated PyTorch MLP (class-aware)")
+    parser.add_argument("--node-id",        type=str,  default="edge_node_1", help="Node ID to determine allowed classes")
     parser.add_argument("--results-dir",    type=Path, default=DEFAULT_RESULTS_DIR)
     parser.add_argument("--output-dir",     type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--init-scaler-only", action="store_true",
@@ -325,21 +427,21 @@ def main():
     args = parser.parse_args()
 
     print("=" * 65)
-    print(" Node 2 Training: Class-Aware PyTorch MLP (7 classes, 9 neurons)")
+    print(f" {args.node_id} Training: Class-Aware PyTorch MLP")
     print(f" Results dir: {args.results_dir}")
     print(f" Output dir:  {args.output_dir}")
     print(f" Started:     {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 65)
 
     print("\n[Step 1] Loading cyber-only dataset...")
-    master = load_cyber_only_dataset(args.results_dir)
+    master = load_cyber_only_dataset(args.results_dir, args.node_id)
 
     print("\n[Step 2] Engineering features...")
     df = engineer_features(master)
 
     print("\n[Step 3] Training PyTorch MLP...")
     model, scaler, le, feature_names, class_counts, acc = train(
-        df, args.init_scaler_only, args.output_dir
+        df, args.node_id, args.init_scaler_only, args.output_dir
     )
 
     if args.init_scaler_only:

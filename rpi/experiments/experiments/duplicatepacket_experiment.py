@@ -84,6 +84,8 @@ class DuplicatePacketExperiment(BaseExperiment):
         
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((self.target_ip, self.target_port))
+        src_ip, src_port = self.sock.getsockname()
+        self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
 
         start_time = time.time()
         
@@ -106,5 +108,6 @@ class DuplicatePacketExperiment(BaseExperiment):
     def cleanup(self) -> None:
         if self.sock:
             self.sock.close()
+        self._clear_attacker_flows()
         self.logger.info(f"[{self.name}] Duplicate Packet Attack complete. Sent: {self.sent_count}")
         self._log_cleaned_up()

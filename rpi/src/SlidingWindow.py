@@ -60,7 +60,15 @@ class PacketEntry:
         "arrival_time", "node_id", "src_ip", "dst_ip", "src_port", "dst_port",
         "size", "seq", "inter_arrival_time", "seq_gap",
         "is_duplicate", "is_out_of_order", "is_valid", "crc_pass",
-        "connection_start_time",
+        "connection_start_time", "duplicate_delay_ms",
+        # New in feature expansion: tracks bytes received for partial-packet detection
+        "bytes_received",
+        # Tuple of 27 physical floats parsed from the payload.
+        # Allows CyberFeatureExtractor to compute payload plausibility features
+        # (frozen payload, RMS magnitude, cross-axis sanity) needed to detect
+        # DataTampering_CRCForged and PacketInjection_Conformant.
+        # None for invalid/partial packets where parsing fails.
+        "payload_floats",
     )
 
     def __init__(
@@ -80,6 +88,9 @@ class PacketEntry:
         is_valid: bool,
         crc_pass: bool,
         connection_start_time: Optional[float],
+        duplicate_delay_ms: float = -1.0,
+        bytes_received: int = 0,
+        payload_floats: Optional[tuple] = None,
     ):
         self.arrival_time          = arrival_time
         self.node_id               = node_id
@@ -96,6 +107,11 @@ class PacketEntry:
         self.is_valid              = is_valid
         self.crc_pass              = crc_pass
         self.connection_start_time = connection_start_time
+        self.duplicate_delay_ms    = duplicate_delay_ms
+        self.bytes_received        = bytes_received
+        # 27 physical floats: (mean_x, mean_y, mean_z, rms_x, ..., crf_z)
+        # None for invalid/partial packets.
+        self.payload_floats        = payload_floats
 
     def __repr__(self) -> str:
         return (

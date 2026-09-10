@@ -10,6 +10,7 @@
 =============================================================================
 """
 
+import os
 import subprocess
 import time
 import sys
@@ -19,11 +20,14 @@ import argparse
 from pathlib import Path
 
 BASE_DIR    = Path(__file__).resolve().parent
-MODELS_DIR  = BASE_DIR / "models"
+NODE_ID     = os.environ.get("NODE_ID", "edge_node_1")
+MODELS_DIR  = BASE_DIR / f"models_{NODE_ID}"
 ARCHIVE_DIR = MODELS_DIR / "archive"
 EVAL_DIR    = BASE_DIR / "rpi" / "experiments" / "results" / "evaluation"
 TEST_SCRIPT = BASE_DIR / "network_analysis" / "test_fused_model.py"
 FL_CLIENT   = BASE_DIR / "rpi" / "src" / "FederatedClient.py"
+
+ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def evaluate_model(model_path: Path, label: str) -> tuple[float, str]:

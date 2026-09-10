@@ -230,6 +230,18 @@ class DataManager:
             parsed["arrival_time"] = arrival_time
 
             # Build a fully-populated PacketEntry for the WindowManager
+            f = parsed.get("features", {})
+            payload_floats = (
+                f.get("mean_x", 0.0), f.get("mean_y", 0.0), f.get("mean_z", 0.0),
+                f.get("rms_x",  0.0), f.get("rms_y",  0.0), f.get("rms_z",  0.0),
+                f.get("std_x",  0.0), f.get("std_y",  0.0), f.get("std_z",  0.0),
+                f.get("max_x",  0.0), f.get("max_y",  0.0), f.get("max_z",  0.0),
+                f.get("min_x",  0.0), f.get("min_y",  0.0), f.get("min_z",  0.0),
+                f.get("p2p_x",  0.0), f.get("p2p_y",  0.0), f.get("p2p_z",  0.0),
+                f.get("skew_x", 0.0), f.get("skew_y", 0.0), f.get("skew_z", 0.0),
+                f.get("kurt_x", 0.0), f.get("kurt_y", 0.0), f.get("kurt_z", 0.0),
+                f.get("crf_x",  0.0), f.get("crf_y",  0.0), f.get("crf_z",  0.0),
+            )
             entry = PacketEntry(
                 arrival_time          = arrival_time,
                 node_id               = node_id,
@@ -244,8 +256,11 @@ class DataManager:
                 is_duplicate          = metrics["is_duplicate"],
                 is_out_of_order       = metrics["is_out_of_order"],
                 is_valid              = True,
-                crc_pass              = True,
+                crc_pass              = parsed.get("crc_pass", False),
                 connection_start_time = metrics["connection_start_time"],
+                duplicate_delay_ms    = metrics.get("duplicate_delay", -1.0) * 1000.0 if metrics.get("duplicate_delay", -1.0) >= 0 else -1.0,
+                bytes_received        = parsed["raw_length"],
+                payload_floats        = payload_floats,
             )
 
             # Route to PhysicalCSVWriter
@@ -312,18 +327,20 @@ class DataManager:
 
             # Forward invalid packets to WindowManager so integrity features
             # (crc_failure_count, invalid_packet_count) are counted accurately.
-            # Packets with node_id == -1 cannot be associated with any node window
-            # and are silently discarded by WindowManager.add_packet().
-            if node_id >= 0:
-                crc_ok = (err_msg != "CRC mismatch")
-                invalid_entry = PacketEntry(
-                    arrival_time          = arrival_time,
-                    node_id               = node_id,
-                    src_ip                = src_ip,
-                    dst_ip                = dst_ip,
-                    src_port              = src_port,
-                    dst_port              = dst_port,
-                    size                  = len(data),
+            # Unidentifiable packets (node_id == -1) like raw TCP SYN floods are
+            # now routed to the primary test node (node_id = 0) to ensure they
+            # appear in the ground-truth fraction calculation.
+            target_node_id = 0 if node_id < 0 else node_id
+            
+            crc_ok = (err_msg != "CRC mismatch")
+            invalid_entry = PacketEntry(
+                arrival_time          = arrival_time,
+                node_id               = target_node_id,
+                src_ip                = src_ip,
+                dst_ip                = dst_ip,
+                src_port              = src_port,
+                dst_port              = dst_port,
+                size                  = len(data),
                     seq                   = -1,      # Unknown for invalid packets
                     inter_arrival_time    = 0.0,
                     seq_gap               = 0,
@@ -332,8 +349,9 @@ class DataManager:
                     is_valid              = False,
                     crc_pass              = crc_ok,
                     connection_start_time = None,    # Not available for invalid packets
-                )
-                self.window_manager.add_packet(invalid_entry)
+                    duplicate_delay_ms    = -1.0,
+            )
+            self.window_manager.add_packet(invalid_entry)
 
     # ------------------------------------------------------------------
     # Lifecycle

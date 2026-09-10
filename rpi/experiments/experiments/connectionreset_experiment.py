@@ -93,6 +93,8 @@ class ConnectionResetExperiment(BaseExperiment):
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 s.settimeout(1.0)
                 s.connect((self.target_ip, self.target_port))
+                src_ip, src_port = s.getsockname()
+                self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
                 
                 # Send one valid handshake packet so the Edge Node registers
                 # this as a connection from node_id before we drop it.
@@ -113,5 +115,6 @@ class ConnectionResetExperiment(BaseExperiment):
         self._log_completed()
 
     def cleanup(self) -> None:
+        self._clear_attacker_flows()
         self.logger.info(f"[{self.name}] Connection Reset complete. Cycled {self.count} times.")
         self._log_cleaned_up()

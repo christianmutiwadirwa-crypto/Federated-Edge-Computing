@@ -148,6 +148,81 @@ class FeatureTransformer:
         if "total_bytes" in df.columns:
             df["bytes_per_packet"] = (df["total_bytes"] / tp).fillna(0.0)
 
+        # 5. Delay Signature (Interarrival CV)
+        if "std_interarrival_time" in df.columns and "mean_interarrival_time" in df.columns:
+            df["interarrival_cv"] = (
+                df["std_interarrival_time"] / (df["mean_interarrival_time"] + 1e-6)
+            ).fillna(0.0)
+
+        # 6. Packet Injection Signature (Sequence Chaos)
+        if "std_sequence_increment" in df.columns and "mean_sequence_increment" in df.columns:
+            df["sequence_chaos"] = (
+                df["std_sequence_increment"] / (df["mean_sequence_increment"] + 1e-6)
+            ).fillna(0.0)
+
+        # 7. Payload Efficiency
+        if "data_rate" in df.columns and "packet_rate" in df.columns:
+            df["payload_efficiency"] = (
+                df["data_rate"] / (df["packet_rate"] + 1e-6)
+            ).fillna(0.0)
+
+        # 8. Burst-to-Rate Ratio
+        if "burst_intensity" in df.columns and "packet_rate" in df.columns:
+            df["burst_to_rate_ratio"] = (
+                df["burst_intensity"] / (df["packet_rate"] + 1e-6)
+            ).fillna(0.0)
+
+        # 9. Partial Packet Rate (SlowDoS primary signal)
+        if "partial_packet_count" in df.columns:
+            df["partial_packet_rate"] = (df["partial_packet_count"] / tp).fillna(0.0)
+
+        # 10. Invalid Packets Per Second (Injection rate-normalised)
+        if "invalid_packet_count" in df.columns and "connection_duration" in df.columns:
+            dur = df["connection_duration"].replace(0, np.nan)
+            df["invalid_pps"] = (df["invalid_packet_count"] / dur).fillna(0.0)
+
+        # 11. Integrity Score (composite health metric)
+        if "crc_failure_rate" in df.columns and "invalid_packet_rate" in df.columns:
+            df["integrity_score"] = (
+                1.0 - df["crc_failure_rate"] - df["invalid_packet_rate"]
+            ).clip(lower=0.0)
+
+        # 12. Effective Throughput (accounts for loss)
+        if "data_rate" in df.columns and "packet_loss_rate" in df.columns:
+            df["effective_throughput"] = (
+                df["data_rate"] * (1.0 - df["packet_loss_rate"])
+            ).fillna(0.0)
+
+        # 13. Timing Jitter Score (IAT range; key for Delay attack)
+        if "iat_range" in df.columns:
+            df["timing_jitter_score"] = df["iat_range"]
+        elif "max_interarrival_time" in df.columns and "min_interarrival_time" in df.columns:
+            df["timing_jitter_score"] = df["max_interarrival_time"] - df["min_interarrival_time"]
+
+        # 14. Connection Health (reset density)
+        if "reconnection_count" in df.columns and "connection_duration" in df.columns:
+            df["connection_health"] = (
+                df["reconnection_count"] / (df["connection_duration"] + 1.0)
+            ).fillna(0.0)
+
+        # 15. Packet Efficiency (valid ratio vs total rate)
+        if "valid_packet_rate" in df.columns and "packet_rate" in df.columns:
+            df["packet_efficiency"] = (
+                df["valid_packet_rate"] / (df["packet_rate"] + 1e-6)
+            ).fillna(0.0)
+        elif "valid_packet_count" in df.columns:
+            df["packet_efficiency"] = (df["valid_packet_count"] / tp).fillna(0.0)
+
+        # 16. Sequence Variance (injection / replay chaos)
+        if "std_sequence_increment" in df.columns:
+            df["seq_variance"] = (df["std_sequence_increment"] ** 2).fillna(0.0)
+
+        # 17. Loss-to-Duplicate Ratio (distinguishes PacketLoss from DuplicatePacket)
+        if "packet_loss_rate" in df.columns and "anomaly_packet_rate" in df.columns:
+            df["loss_to_duplicate_ratio"] = (
+                df["packet_loss_rate"] / (df["anomaly_packet_rate"] + 1e-6)
+            ).fillna(0.0)
+
         # Drop all metadata columns (ignore missing ones silently)
         cols_to_drop = [c for c in CYBER_METADATA_COLS + PHYSICAL_METADATA_COLS
                         if c in df.columns]
@@ -211,6 +286,48 @@ class FeatureTransformer:
             self._prev_values[col] = current_val
             
         self._is_first_window = False
+
+        # --- Derived Features ---
+        tp = combined.get("total_packets", 0.0)
+        tp_safe = tp if tp != 0.0 else 1e-6
+        
+        combined["anomaly_packet_count"] = combined.get("duplicate_packet_count", 0.0) + combined.get("out_of_order_packet_count", 0.0)
+        combined["anomaly_packet_rate"] = combined["anomaly_packet_count"] / tp_safe
+        
+        combined["sequence_gap_rate"] = combined.get("sequence_number_gap", 0.0) / tp_safe
+        
+        combined["slowness_score"] = combined.get("mean_interarrival_time", 0.0) * combined.get("packet_rate", 0.0)
+        
+        combined["bytes_per_packet"] = combined.get("total_bytes", 0.0) / tp_safe
+        
+        combined["interarrival_cv"] = combined.get("std_interarrival_time", 0.0) / (combined.get("mean_interarrival_time", 0.0) + 1e-6)
+        
+        combined["sequence_chaos"] = combined.get("std_sequence_increment", 0.0) / (combined.get("mean_sequence_increment", 0.0) + 1e-6)
+        
+        combined["payload_efficiency"] = combined.get("data_rate", 0.0) / (combined.get("packet_rate", 0.0) + 1e-6)
+        
+        combined["burst_to_rate_ratio"] = combined.get("burst_intensity", 0.0) / (combined.get("packet_rate", 0.0) + 1e-6)
+
+        # New derived features (feature expansion)
+        combined["partial_packet_rate"] = combined.get("partial_packet_count", 0.0) / tp_safe
+        
+        dur_safe = combined.get("connection_duration", 0.0) if combined.get("connection_duration", 0.0) != 0.0 else 1e-6
+        combined["invalid_pps"] = combined.get("invalid_packet_count", 0.0) / dur_safe
+        
+        combined["integrity_score"] = max(0.0, 1.0 - combined.get("crc_failure_rate", 0.0) - combined.get("invalid_packet_rate", 0.0))
+        
+        combined["effective_throughput"] = combined.get("data_rate", 0.0) * (1.0 - combined.get("packet_loss_rate", 0.0))
+        
+        combined["timing_jitter_score"] = combined.get("iat_range", combined.get("max_interarrival_time", 0.0) - combined.get("min_interarrival_time", 0.0))
+        
+        combined["connection_health"] = combined.get("reconnection_count", 0.0) / (combined.get("connection_duration", 0.0) + 1.0)
+        
+        vpr = combined.get("valid_packet_rate", combined.get("valid_packet_count", 0.0) / tp_safe)
+        combined["packet_efficiency"] = vpr / (combined.get("packet_rate", 0.0) + 1e-6)
+        
+        combined["seq_variance"] = combined.get("std_sequence_increment", 0.0) ** 2
+        
+        combined["loss_to_duplicate_ratio"] = combined.get("packet_loss_rate", 0.0) / (combined.get("anomaly_packet_rate", 0.0) + 1e-6)
 
         # Build sorted feature vector (alphabetical sort guarantees
         # the same column order as the training DataFrame)

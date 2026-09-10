@@ -93,8 +93,11 @@ pending_scalers: Dict[str, Dict[str, Any]] = {}
 round_number: int = 0
 
 # Updates waiting to be aggregated for the CURRENT round.
-# node_id -> {coefs, intercepts, submitted_at, architecture_summary}
+# node_id -> {coefs, intercepts, submitted_at, architecture_summary, fisher_coefs, fisher_intercepts}
 pending_updates: Dict[str, Dict[str, Any]] = {}
+
+# The latest weights and Fisher matrices from the previous round (for FedCurv)
+latest_client_states: Dict[str, Dict[str, Any]] = {}
 
 # Per-round history (last N rounds kept in memory)
 round_history: List[Dict[str, Any]] = []
@@ -125,6 +128,8 @@ class WeightUpdate(BaseModel):
     local_accuracy: Optional[float] = None   # 0.0–1.0 if node reports it
     training_samples: Optional[int] = None   # samples used for local training
     class_counts: Optional[List[int]] = None # samples per class for weighted aggregation
+    fisher_coefs: Optional[List[List[List[float]]]] = None
+    fisher_intercepts: Optional[List[List[float]]] = None
 
 
 class ValidationUpdate(BaseModel):
@@ -151,7 +156,7 @@ def _describe_architecture(coefs: List, intercepts: List) -> str:
         return "N/A"
     input_dim = len(coefs[0][0])
     layers = [input_dim] + [len(layer) for layer in intercepts]
-    return "→".join(str(l) for l in layers)
+    return "->".join(str(l) for l in layers)
 
 
 def _now_iso() -> str:
@@ -167,7 +172,7 @@ async def run_fedavg() -> None:
     Perform Federated Averaging (FedAvg) on all pending_updates.
     Updates global_model and clears pending_updates.
     """
-    global global_model, round_number, pending_updates, round_history
+    global global_model, round_number, pending_updates, round_history, latest_client_states
 
     async with aggregation_lock:
         if len(pending_updates) < EXPECTED_CLIENTS:
@@ -216,15 +221,9 @@ async def run_fedavg() -> None:
                         for i, nid in enumerate(node_ids):
                             avg_layer[:, c] += layer_arrays[i][:, c] / num_clients
             else:
-                # Sample-weighted average for hidden layers
-                if total_samples > 0:
-                    avg_layer = sum(
-                        layer_arrays[i] * ((pending_updates[nid].get("training_samples") or 0) / total_samples)
-                        for i, nid in enumerate(node_ids)
-                    )
-                else:
-                    avg_layer = np.mean(layer_arrays, axis=0)
-                
+                # Simple average for hidden layers to prevent feature dilution
+                # from massively imbalanced dataset sizes.
+                avg_layer = np.mean(layer_arrays, axis=0)
             new_coefs.append(avg_layer.tolist())
 
         # Average intercepts
@@ -252,14 +251,8 @@ async def run_fedavg() -> None:
                         for i, nid in enumerate(node_ids):
                             avg_layer[c] += layer_arrays[i][c] / num_clients
             else:
-                # Sample-weighted average for hidden layers
-                if total_samples > 0:
-                    avg_layer = sum(
-                        layer_arrays[i] * ((pending_updates[nid].get("training_samples") or 0) / total_samples)
-                        for i, nid in enumerate(node_ids)
-                    )
-                else:
-                    avg_layer = np.mean(layer_arrays, axis=0)
+                # Simple average for hidden layers to prevent feature dilution
+                avg_layer = np.mean(layer_arrays, axis=0)
                 
             new_intercepts.append(avg_layer.tolist())
 
@@ -309,6 +302,16 @@ async def run_fedavg() -> None:
                 node_registry[nid]["last_update_at"] = completed_at
                 node_registry[nid]["rounds_participated"] = \
                     node_registry[nid].get("rounds_participated", 0) + 1
+
+        # Save client states for FedCurv before clearing pending_updates
+        latest_client_states.clear()
+        for nid, info in pending_updates.items():
+            latest_client_states[nid] = {
+                "coefs": info["coefs"],
+                "intercepts": info["intercepts"],
+                "fisher_coefs": info.get("fisher_coefs"),
+                "fisher_intercepts": info.get("fisher_intercepts"),
+            }
 
         pending_updates.clear()
 
@@ -426,6 +429,8 @@ async def submit_update(update: WeightUpdate, background_tasks: BackgroundTasks)
             "local_accuracy": update.local_accuracy,
             "training_samples": update.training_samples,
             "class_counts": update.class_counts,
+            "fisher_coefs": update.fisher_coefs,
+            "fisher_intercepts": update.fisher_intercepts,
         }
 
         # Update node registry
@@ -470,6 +475,7 @@ async def reset_server():
         global_model = {"coefs": [], "intercepts": []}
         round_number = 0
         pending_updates.clear()
+        latest_client_states.clear()
         round_history.clear()
         node_registry.clear()
         validation_history.clear()
@@ -511,7 +517,8 @@ async def get_global_model():
 
         return {
             "round": round_number,
-            "weights": global_model
+            "weights": global_model,
+            "client_states": latest_client_states
         }
 
 

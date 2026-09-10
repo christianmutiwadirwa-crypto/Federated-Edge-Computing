@@ -14,13 +14,11 @@ for exp in experiments:
         capture_output=True, text=True, timeout=15
     )
     lines = result.stdout.splitlines()
-    label_line = [l for l in lines if 'Label' in l and 'set' in l]
     completed  = any('completed' in l.lower() for l in lines)
     cleanup    = any('cleaned up' in l.lower() for l in lines)
-    sync       = any('Syncing datasets' in l for l in lines)
+    sync       = any('sync' in l.lower() for l in lines)
     if result.returncode == 0 and completed and cleanup and sync:
-        label_val = label_line[0].split("'")[-2] if label_line and "'" in label_line[0] else '?'
-        print(f'  OK  {exp:22s}  label={label_val}')
+        print(f'  OK  {exp:22s}')
     else:
         failures.append(exp)
         print(f'  FAIL {exp}')

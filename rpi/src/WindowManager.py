@@ -83,11 +83,10 @@ class WindowManager:
         # One CyberFeatureExtractor instance (stateless — safe to share)
         self._extractor = CyberFeatureExtractor(config_manager)
 
-        # Attack label file (file-based IPC with the attack framework process)
+        # Base state directory for potential future IPC
         base_dir = Path(config_manager.get("directories", {}).get("base", "EdgeNode"))
         state_dir = base_dir / "state"
         state_dir.mkdir(parents=True, exist_ok=True)
-        self._label_file: Path = state_dir / "attack_label.txt"
 
         # Per-node windows  {node_id → SlidingWindow}
         self._windows: Dict[int, SlidingWindow] = {}
@@ -219,9 +218,6 @@ class WindowManager:
             window_id = self._window_id
             self._window_id += 1
 
-        # Read the current attack label from the label file (file-based IPC)
-        attack_label = self._read_label()
-
         # Drain the per-window reconnection count from session state
         node_state = self._connection_manager.get_or_create(node_id)
         reconnection_count = node_state.drain_reconnections()
@@ -234,7 +230,6 @@ class WindowManager:
                 window_end=window_end,
                 packets=packets,
                 reconnection_count=reconnection_count,
-                attack_label=attack_label,
             )
         except Exception as e:
             self._logger.log(
@@ -264,28 +259,4 @@ class WindowManager:
         except queue.Full:
             pass # Inference queue is non-blocking drop-if-full to prevent memory leaks
 
-    # ------------------------------------------------------------------
-    # AttackLabel file-based IPC
-    # ------------------------------------------------------------------
 
-    def _read_label(self) -> str:
-        """
-        Read the current attack label from the shared label file.
-
-        The attack framework writes the label string to this file before
-        starting an attack run and reverts it to 'Normal' afterwards.
-
-        Returns:
-            The label string (e.g. 'Normal', 'FloodAttack').
-            Defaults to 'Normal' if the file is missing, empty, or unreadable.
-        """
-        try:
-            if self._label_file.exists():
-                label = self._label_file.read_text(encoding="utf-8").strip()
-                return label if label else "Normal"
-        except Exception as e:
-            self._logger.log(
-                f"WindowManager: could not read label file: {e}",
-                severity="WARNING",
-            )
-        return "Normal"

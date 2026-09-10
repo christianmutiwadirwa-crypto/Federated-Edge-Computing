@@ -4,7 +4,6 @@ import time
 
 from core.logger import Logger
 from core.config_manager import ConfigManager
-from core.label_manager import LabelManager
 from core.dataset_sync import DatasetSynchronizer
 from core.base_experiment import BaseExperiment
 
@@ -18,7 +17,6 @@ class ExperimentManager:
     def __init__(self, config_manager: ConfigManager, logger: Logger):
         self.config_manager = config_manager
         self.logger = logger
-        self.label_manager = LabelManager(config_manager.config, logger)
         self.dataset_sync = DatasetSynchronizer(config_manager.config, logger)
 
     # Registry of all available experiment names → their module and class names.
@@ -99,10 +97,6 @@ class ExperimentManager:
             self.logger.info(f"[{experiment_instance.name}] Initializing...")
             experiment_instance.initialize()
             
-            # 4. Set IPC Label (Start Attack Labelling)
-            self.logger.info(f"[{experiment_instance.name}] Injecting Attack Label to Edge Node IPC...")
-            self.label_manager.set_label(experiment_instance.name)
-            
             # 5. Run Experiment
             self.logger.info(f"[{experiment_instance.name}] Running experiment logic...")
             experiment_instance.run()
@@ -111,10 +105,6 @@ class ExperimentManager:
             self.logger.error(f"[{experiment_instance.name}] Encountered unhandled exception during run: {e}")
             
         finally:
-            # 6. Revert IPC Label
-            self.logger.info(f"[{experiment_instance.name}] Reverting Attack Label to 'Normal'...")
-            self.label_manager.reset()
-            
             # 7. Cleanup
             self.logger.info(f"[{experiment_instance.name}] Cleaning up...")
             try:

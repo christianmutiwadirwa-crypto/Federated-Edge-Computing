@@ -96,6 +96,52 @@ class BaseExperiment(ABC):
         self.logger.info(f"[{self.name}] Experiment cleaned up.")
 
     # ------------------------------------------------------------------
+    # Ground-Truth Identity Registration (Flow-based)
+    # ------------------------------------------------------------------
+    def _register_attacker_flow(self, src_ip: str, src_port: int, dst_ip: str, dst_port: int) -> None:
+        """
+        Record the exact flow 5-tuple used by this attacker.
+        This provides ground-truth to the CyberFeatureExtractor to determine
+        exactly which packets in a sliding window belong to the attack.
+        """
+        import json
+        from pathlib import Path
+        
+        base_dir = Path(self.config.get("directories", {}).get("base", "EdgeNode"))
+        state_dir = base_dir / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        flows_file = state_dir / "attacker_flows.json"
+        
+        flows = []
+        if flows_file.exists():
+            try:
+                flows = json.loads(flows_file.read_text())
+            except:
+                pass
+                
+        flow = {
+            "src_ip": src_ip,
+            "src_port": src_port,
+            "dst_ip": dst_ip,
+            "dst_port": dst_port,
+            "experiment": self.name
+        }
+        if flow not in flows:
+            flows.append(flow)
+            
+        flows_file.write_text(json.dumps(flows, indent=2))
+        
+    def _clear_attacker_flows(self) -> None:
+        """Clear all registered attacker flows (called during cleanup)."""
+        from pathlib import Path
+        
+        base_dir = Path(self.config.get("directories", {}).get("base", "EdgeNode"))
+        state_dir = base_dir / "state"
+        flows_file = state_dir / "attacker_flows.json"
+        if flows_file.exists():
+            flows_file.unlink()
+
+    # ------------------------------------------------------------------
     # Abstract lifecycle methods — must be implemented by every subclass
     # ------------------------------------------------------------------
 

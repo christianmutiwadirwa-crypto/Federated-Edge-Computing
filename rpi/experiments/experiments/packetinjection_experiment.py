@@ -106,6 +106,8 @@ class PacketInjectionExperiment(BaseExperiment):
             self.sock.settimeout(5.0)
             self.sock.connect((self.target_ip, self.target_port))
             self.sock.settimeout(None)
+            src_ip, src_port = self.sock.getsockname()
+            self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
         except Exception as e:
             self.logger.error(f"Cannot connect to {self.target_ip}:{self.target_port} — {e}")
             return
@@ -192,5 +194,6 @@ class PacketInjectionExperiment(BaseExperiment):
     def cleanup(self) -> None:
         if self.sock:
             self.sock.close()
-        self.logger.info(f"[{self.name}] Injection complete: {self.sent}/{self.num_packets} packets sent, {self.errors} errors.")
+        self._clear_attacker_flows()
+        self.logger.info(f"[{self.name}] Injection complete: {self.sent} packets sent, {self.errors} errors.")
         self._log_cleaned_up()

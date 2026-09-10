@@ -88,6 +88,8 @@ class FloodingExperiment(BaseExperiment):
         
         try:
             self.sock = self._connect()
+            src_ip, src_port = self.sock.getsockname()
+            self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
         except Exception as e:
             self.logger.error(f"Cannot connect to {self.target_ip}:{self.target_port} — {e}")
             return
@@ -116,6 +118,8 @@ class FloodingExperiment(BaseExperiment):
                     if self.sock:
                         self.sock.close()
                     self.sock = self._connect()
+                    src_ip, src_port = self.sock.getsockname()
+                    self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
                 except Exception as ce:
                     self.logger.error(f"Reconnect failed: {ce}")
                     break
@@ -140,5 +144,6 @@ class FloodingExperiment(BaseExperiment):
     def cleanup(self) -> None:
         if self.sock:
             self.sock.close()
+        self._clear_attacker_flows()
         self.logger.info(f"[{self.name}] Flood complete: {self.sent} packets sent, {self.errors} errors.")
         self._log_cleaned_up()

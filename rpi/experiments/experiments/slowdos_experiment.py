@@ -74,6 +74,8 @@ class SlowDoSExperiment(BaseExperiment):
             sock.settimeout(5.0)
             sock.connect((self.target_ip, self.target_port))
             sock.settimeout(self.interval_sec + 10.0)
+            src_ip, src_port = sock.getsockname()
+            self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
             with self.lock:
                 self.sockets.append(sock)
             self.logger.info(f"[{self.name}-W{worker_id}] Connected.")
@@ -107,6 +109,8 @@ class SlowDoSExperiment(BaseExperiment):
                     sock.settimeout(5.0)
                     sock.connect((self.target_ip, self.target_port))
                     sock.settimeout(self.interval_sec + 10.0)
+                    src_ip, src_port = sock.getsockname()
+                    self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
                     with self.lock:
                         self.sockets.append(sock)
                 except Exception:
@@ -156,7 +160,8 @@ class SlowDoSExperiment(BaseExperiment):
             for sock in self.sockets:
                 try:
                     sock.close()
-                except:
+                except Exception:
                     pass
-        self.logger.info(f"[{self.name}] Slow drain complete: {self.sent} packets sent, {self.errors} errors.")
+        self._clear_attacker_flows()
+        self.logger.info(f"[{self.name}] SlowDoS complete: {self.sent} packets sent, {self.errors} errors.")
         self._log_cleaned_up()

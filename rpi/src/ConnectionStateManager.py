@@ -58,6 +58,10 @@ class NodeState:
         # Mutated only by compute_packet_metrics() (DataManager validation thread).
         self.latest_sequence_number: int  = -1
         self.previous_arrival_timestamp: float = -1.0
+        
+        # Track recent sequence timestamps for Duplicate vs Replay detection
+        # Replays have huge delays, true duplicates are nearly immediate
+        self._seen_seqs: Dict[int, float] = {}
 
         # --- Reconnection counter ---
         # Incremented by record_reconnection() which may be called from
@@ -87,6 +91,7 @@ class NodeState:
         # Reset sequence state — new connection has a new sequence stream.
         self.latest_sequence_number    = -1
         self.previous_arrival_timestamp = -1.0
+        self._seen_seqs.clear()
 
     def drain_reconnections(self) -> int:
         """
@@ -133,6 +138,7 @@ class NodeState:
               is_duplicate         (bool) : True if seq == latest_sequence_number.
               is_out_of_order      (bool) : True if seq < latest_sequence_number.
               connection_start_time(float): Unix timestamp of session start (for PacketEntry).
+              duplicate_delay      (float): seconds since this seq was first seen (-1.0 if not duplicate)
         """
         # --- Set session start on first packet ---
         if self.connection_start_time is None:
@@ -148,6 +154,7 @@ class NodeState:
         is_duplicate    = False
         is_out_of_order = False
         seq_gap         = 0
+        duplicate_delay = -1.0
 
         if self.latest_sequence_number != -1:
             if seq == self.latest_sequence_number:
@@ -159,6 +166,16 @@ class NodeState:
             elif seq > self.latest_sequence_number + 1:
                 # Gap: one or more sequence numbers are missing
                 seq_gap = seq - self.latest_sequence_number - 1
+
+        # Calculate time since this exact sequence number was first seen
+        if seq in self._seen_seqs:
+            duplicate_delay = arrival_time - self._seen_seqs[seq]
+        else:
+            # Bound dictionary size to avoid memory leaks on long-running nodes
+            if len(self._seen_seqs) > 50000:
+                # Crude evict of oldest (Python 3.7+ dicts preserve insertion order)
+                self._seen_seqs.pop(next(iter(self._seen_seqs)))
+            self._seen_seqs[seq] = arrival_time
 
         # --- State update ---
         # Only advance latest_sequence_number for in-order, non-duplicate packets
@@ -172,6 +189,7 @@ class NodeState:
             "is_duplicate":          is_duplicate,
             "is_out_of_order":       is_out_of_order,
             "connection_start_time": self.connection_start_time,
+            "duplicate_delay":       duplicate_delay,
         }
 
 

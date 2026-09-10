@@ -51,6 +51,8 @@ class CyberCSVWriter:
         "total_bytes",
         "packet_rate",
         "data_rate",
+        "valid_packet_count",
+        "valid_packet_rate",
 
         # Packet Size Statistics
         "mean_packet_size",
@@ -63,13 +65,18 @@ class CyberCSVWriter:
         "std_interarrival_time",
         "min_interarrival_time",
         "max_interarrival_time",
+        "iat_range",
         "connection_duration",
+        "window_active_span",
 
         # Reliability Features
         "packet_loss_rate",
         "duplicate_packet_count",
+        "mean_duplicate_delay_ms",
         "out_of_order_packet_count",
         "sequence_number_gap",
+        "total_seq_gap",
+        "min_seq_gap",
         "reconnection_count",
 
         # Integrity Features
@@ -77,15 +84,24 @@ class CyberCSVWriter:
         "crc_failure_rate",
         "invalid_packet_count",
         "invalid_packet_rate",
+        "partial_packet_count",
 
         # Behaviour Features
         "burst_intensity",
         "mean_sequence_increment",
         "std_sequence_increment",
+        "unique_src_ports_count",
+
+        # Payload Plausibility Features
+        "payload_rms_magnitude",
+        "payload_frozen_count",
+        "payload_cross_axis_std",
+        "payload_all_zeros_count",
 
         # Label
         "AttackLabel",
     ]
+
 
     def __init__(self, config_manager, data_queue: queue.Queue):
         """

@@ -143,6 +143,46 @@ def apply_weights(model: FederatedMLP, coefs: list, intercepts: list) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Fisher Information (FedCurv)
+# ---------------------------------------------------------------------------
+
+def compute_fisher_diagonals(model: nn.Module, dataloader: torch.utils.data.DataLoader, num_samples: int = 1000) -> list:
+    """
+    Computes the diagonal Fisher information matrix for the model using the local dataset.
+    Returns a list of tensors aligned with model.parameters().
+    """
+    model.eval()
+    fisher_diagonals = [torch.zeros_like(p, device=p.device) for p in model.parameters()]
+    total_samples = 0
+    
+    # Use empirical Fisher: average of squared gradients over samples
+    for x, y in dataloader:
+        if total_samples >= num_samples:
+            break
+            
+        for i in range(x.size(0)):
+            model.zero_grad()
+            logits = model(x[i:i+1])
+            # Empirical Fisher uses ground-truth labels
+            loss = F.cross_entropy(logits, y[i:i+1])
+            loss.backward()
+            
+            with torch.no_grad():
+                for f, p in zip(fisher_diagonals, model.parameters()):
+                    if p.grad is not None:
+                        f += p.grad.pow(2)
+            total_samples += 1
+            if total_samples >= num_samples:
+                break
+
+    with torch.no_grad():
+        for f in fisher_diagonals:
+            f /= max(total_samples, 1)
+            
+    return fisher_diagonals
+
+
+# ---------------------------------------------------------------------------
 # Composite Federated Loss
 # ---------------------------------------------------------------------------
 
@@ -156,6 +196,8 @@ def federated_loss(
     lambda_kd: float = 0.5,
     mu:        float = 0.01,
     T:         float = 3.0,
+    lambda_fedcurv: float = 1.0,
+    other_clients_data: list = None,
 ) -> torch.Tensor:
     """
     L = L_CE  +  λ * L_KD  +  (μ/2) * ||W - W_global||²
@@ -176,10 +218,12 @@ def federated_loss(
     # Only penalize the student for drifting on classes it has no local data for.
     # For its own classes, it should trust its ground-truth labels (CE loss) completely.
     kd = 0.0
-    if missing_classes:
-        missing_idx = list(missing_classes)
-        # We use MSE on the raw logits of the missing classes to anchor them to the global model
-        kd = F.mse_loss(student_logits[:, missing_idx], teacher_logits[:, missing_idx].detach())
+    if lambda_kd > 0.0:
+        # KL Divergence with Temperature Scaling across all classes
+        # This protects hidden-layer representations for unseen classes
+        log_prob_s = F.log_softmax(student_logits / T, dim=1)
+        prob_t     = F.softmax(teacher_logits.detach() / T, dim=1)
+        kd = F.kl_div(log_prob_s, prob_t, reduction='batchmean') * (T * T)
 
     # 3. FedProx proximal term
     prox = sum(
@@ -187,4 +231,13 @@ def federated_loss(
         for w, wg in zip(student_params, global_params)
     )
 
-    return ce + lambda_kd * kd + (mu / 2) * prox
+    # 4. FedCurv Fisher penalty
+    fedcurv_loss = 0.0
+    if other_clients_data and lambda_fedcurv > 0.0:
+        for client_data in other_clients_data:
+            cw = client_data["weights"]
+            cf = client_data["fisher"]
+            for sw, w_k, f_k in zip(student_params, cw, cf):
+                fedcurv_loss += (f_k * (sw - w_k.detach()).pow(2)).sum()
+
+    return ce + lambda_kd * kd + (mu / 2) * prox + lambda_fedcurv * fedcurv_loss

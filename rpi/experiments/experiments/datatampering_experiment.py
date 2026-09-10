@@ -75,6 +75,8 @@ class DataTamperingExperiment(BaseExperiment):
         s.settimeout(5.0)
         s.connect((self.target_ip, self.target_port))
         s.settimeout(None)
+        src_ip, src_port = s.getsockname()
+        self._register_attacker_flow(src_ip, src_port, self.target_ip, self.target_port)
         return s
 
     def run(self) -> None:
@@ -149,5 +151,6 @@ class DataTamperingExperiment(BaseExperiment):
     def cleanup(self) -> None:
         if self.sock:
             self.sock.close()
-        self.logger.info(f"[{self.name}] Fuzzing/Data Tampering complete: {self.sent}/{self.num_packets} packets sent, {self.errors} errors.")
+        self._clear_attacker_flows()
+        self.logger.info(f"[{self.name}] Data Tampering complete: {self.sent} packets sent, {self.errors} errors.")
         self._log_cleaned_up()
