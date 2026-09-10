@@ -56,9 +56,15 @@ from mlp_torch import FederatedMLP, load_model as _load_torch, apply_weights as 
 class FederatedClient:
     """Manages the full lifecycle of a Federated Learning round on the Edge Node."""
 
-    def __init__(self, server_url: str = FL_SERVER_URL, node_id: str = NODE_ID):
+    def __init__(self, server_url: str = FL_SERVER_URL, node_id: str = NODE_ID, 
+                 no_kd: bool = False, no_fedprox: bool = False, 
+                 no_fedcurv: bool = False, no_freeze: bool = False):
         self.server_url = server_url.rstrip("/")
         self.node_id = node_id
+        self.no_kd = no_kd
+        self.no_fedprox = no_fedprox
+        self.no_fedcurv = no_fedcurv
+        self.no_freeze = no_freeze
 
     def trigger_round(self, skip_training: bool = False):
         """Execute a full FL round."""
@@ -177,10 +183,16 @@ class FederatedClient:
         """Run the training script as a subprocess."""
         print(f"  -> Step 1: Training local MLP on local dataset...")
         try:
+            cmd = ["python", str(TRAIN_SCRIPT), "--node-id", self.node_id, "--output-dir", str(MODELS_DIR)]
+            if self.no_kd: cmd.append("--no-kd")
+            if self.no_fedprox: cmd.append("--no-fedprox")
+            if self.no_fedcurv: cmd.append("--no-fedcurv")
+            if self.no_freeze: cmd.append("--no-freeze")
+
             # We run it as a subprocess to keep the training memory separate
             # from the long-running inference process.
             subprocess.run(
-                ["python", str(TRAIN_SCRIPT), "--node-id", self.node_id, "--output-dir", str(MODELS_DIR)],
+                cmd,
                 check=True
             )
             print("     Local training complete.")
@@ -375,7 +387,18 @@ if __name__ == "__main__":
     parser.add_argument("--node-id", type=str, default=NODE_ID, help="Unique ID of this node")
     parser.add_argument("--server", type=str, default=FL_SERVER_URL, help="URL of the FL Server")
     parser.add_argument("--skip-training", action="store_true", help="Skip local training and upload existing weights")
+    parser.add_argument("--no-kd", action="store_true", help="Disable Knowledge Distillation")
+    parser.add_argument("--no-fedprox", action="store_true", help="Disable FedProx")
+    parser.add_argument("--no-fedcurv", action="store_true", help="Disable FedCurv")
+    parser.add_argument("--no-freeze", action="store_true", help="Disable Output Neuron Freezing")
     args = parser.parse_args()
-    
-    client = FederatedClient(server_url=args.server, node_id=args.node_id)
+
+    client = FederatedClient(
+        server_url=args.server,
+        node_id=args.node_id,
+        no_kd=args.no_kd,
+        no_fedprox=args.no_fedprox,
+        no_fedcurv=args.no_fedcurv,
+        no_freeze=args.no_freeze
+    )
     client.trigger_round(skip_training=args.skip_training)

@@ -94,6 +94,12 @@ def main():
     parser.add_argument("--rounds", type=int, default=10, help="Number of FL rounds to run")
     parser.add_argument("--start-round", type=int, default=1, help="Round number to start from (for logging)")
     parser.add_argument("--delay",  type=int, default=5,  help="Delay in seconds between rounds")
+    
+    # Ablation flags
+    parser.add_argument("--no-kd", action="store_true", help="Disable Knowledge Distillation")
+    parser.add_argument("--no-fedprox", action="store_true", help="Disable FedProx")
+    parser.add_argument("--no-fedcurv", action="store_true", help="Disable FedCurv")
+    parser.add_argument("--no-freeze", action="store_true", help="Disable Output Neuron Freezing")
     args = parser.parse_args()
 
     if not FL_CLIENT.exists():
@@ -117,7 +123,13 @@ def main():
         print(f"{'='*65}\n")
 
         # Run the FL round
-        result = subprocess.run([sys.executable, str(FL_CLIENT)])
+        cmd = [sys.executable, str(FL_CLIENT)]
+        if args.no_kd: cmd.append("--no-kd")
+        if args.no_fedprox: cmd.append("--no-fedprox")
+        if args.no_fedcurv: cmd.append("--no-fedcurv")
+        if args.no_freeze: cmd.append("--no-freeze")
+        
+        result = subprocess.run(cmd)
 
         if result.returncode != 0:
             print(f"\n[!] Round {i} failed (exit code {result.returncode}). Stopping.")

@@ -67,42 +67,53 @@ MU_PROX       = 0.01       # FedProx proximal weight
 KD_TEMP       = 3.0        # Knowledge distillation temperature
 LAMBDA_FEDCURV = 1.0       # FedCurv Fisher-weighted penalty
 
-# Global 9-class schema — output layer fixed at 9 neurons for FL compatibility
+# Global 14-class schema — output layer fixed at 14 neurons for FL compatibility
 GLOBAL_CLASSES = {
-    "ConnectionResetExperiment": 0,
-    "DelayExperiment":           1,
-    "DeviceSpoofExperiment":     2,
-    "DuplicatePacketExperiment": 3,
-    "FloodingExperiment":        4,
-    "Normal":                    5,
-    "PacketInjectionExperiment": 6,
-    "PacketLossExperiment":      7,
-    "SlowDoSExperiment":         8,
+    "Normal":                              0,
+    "FloodingExperiment":                  1,
+    "SlowDoSExperiment":                   2,
+    "PacketInjectionMalformedExperiment":  3,
+    "PacketInjectionConformantExperiment": 4,
+    "PacketLossExperiment":                5,
+    "DuplicatePacketExperiment":           6,
+    "DelayExperiment":                     7,
+    "ConnectionResetExperiment":           8,
+    "ReconScanExperiment":                 9,
+    "DeviceSpoofHardExperiment":           10,
+    "DataTamperingBitFlipExperiment":      11,
+    "DataTamperingCRCForgedExperiment":    12,
+    "ReplayExperiment":                    13,
 }
 
 NODE_CLASSES = {
     "edge_node_1": [
         "Normal",
         "FloodingExperiment",
-        "DeviceSpoofExperiment",
+        "PacketInjectionMalformedExperiment",
+        "PacketLossExperiment",
+        "DuplicatePacketExperiment",
         "DelayExperiment",
         "ConnectionResetExperiment",
-        "DuplicatePacketExperiment",
-        "PacketLossExperiment",
+        "DeviceSpoofHardExperiment",
+        "DataTamperingBitFlipExperiment",
+        "ReplayExperiment"
     ],
     "edge_node_2": [
         "Normal",
+        "FloodingExperiment",
         "SlowDoSExperiment",
-        "PacketInjectionExperiment",
-        "DeviceSpoofExperiment",
+        "PacketInjectionConformantExperiment",
         "PacketLossExperiment",
         "DuplicatePacketExperiment",
-        "FloodingExperiment",
+        "ReconScanExperiment",
+        "DeviceSpoofHardExperiment",
+        "DataTamperingCRCForgedExperiment",
+        "ReplayExperiment"
     ]
 }
 
-# Classes permanently dropped from federation (neither node has reliable data)
-DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
+# No classes are dropped in the expanded 14-class schema
+DROPPED_CLASSES = set()
 
 # ---------------------------------------------------------------------------
 # Step 1: Load Dataset
@@ -111,7 +122,6 @@ DROPPED_CLASSES = {"DataTamperingExperiment", "ReplayExperiment"}
 def load_cyber_only_dataset(results_dir: Path, node_id: str) -> pd.DataFrame:
     """Load cyber_data.csv files only — physical data intentionally excluded."""
     cyber_files = [f for f in results_dir.rglob("cyber_data.csv") if "evaluation" not in f.parts]
-    cyber_files = [f for f in cyber_files if "DataTampering" not in str(f) and "Replay" not in str(f)]
     cyber_files = sorted(cyber_files)
     if not cyber_files:
         raise FileNotFoundError(f"No cyber_data.csv files found under: {results_dir}")
@@ -141,13 +151,18 @@ def load_cyber_only_dataset(results_dir: Path, node_id: str) -> pd.DataFrame:
     other_attacks = master["AttackLabel"].isin([
         "DelayExperiment", "ConnectionResetExperiment", 
         "DuplicatePacketExperiment", "FloodingExperiment", 
-        "DeviceSpoofExperiment", "PacketLossExperiment",
-        "SlowDoSExperiment"
+        "DeviceSpoofHardExperiment", "PacketLossExperiment",
+        "SlowDoSExperiment", "ReconScanExperiment",
+        "DataTamperingBitFlipExperiment", "DataTamperingCRCForgedExperiment",
+        "ReplayExperiment"
     ])
     clean_masks.append(other_attacks & (master["total_packets"] > 2))
     
     # Packet Injection typically only uses 1 or 2 packets, so it must not be filtered by packet count
-    clean_masks.append(master["AttackLabel"] == "PacketInjectionExperiment")
+    clean_masks.append(master["AttackLabel"].isin([
+        "PacketInjectionMalformedExperiment", 
+        "PacketInjectionConformantExperiment"
+    ]))
     
     final_mask = pd.concat(clean_masks, axis=1).any(axis=1)
     master = master[final_mask].reset_index(drop=True)
@@ -184,7 +199,8 @@ def engineer_features(master_df: pd.DataFrame) -> pd.DataFrame:
 # Step 3: Train
 # ---------------------------------------------------------------------------
 
-def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output_dir: Path = None):
+def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output_dir: Path = None,
+          no_kd: bool = False, no_fedprox: bool = False, no_fedcurv: bool = False, no_freeze: bool = False):
     """
     Full training pipeline.
     If init_scaler_only=True, only fits the StandardScaler and exits.
@@ -271,7 +287,8 @@ def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output
         teacher = None  # No global model yet — KD term will be skipped
 
     # Freeze output gradients for missing classes
-    student.register_class_freeze_hooks(missing_classes)
+    if not no_freeze:
+        student.register_class_freeze_hooks(missing_classes)
 
     # Snapshot the global parameters for FedProx
     global_params = [p.detach().clone() for p in student.parameters()]
@@ -310,6 +327,10 @@ def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output
     print(f"\n  Training PyTorch MLP: {len(X_train_resampled)} samples, "
           f"{input_dim} features, {LOCAL_EPOCHS} epoch(s)...")
 
+    actual_lambda_kd = 0.0 if no_kd else LAMBDA_KD
+    actual_mu_prox = 0.0 if no_fedprox else MU_PROX
+    actual_lambda_fedcurv = 0.0 if no_fedcurv else LAMBDA_FEDCURV
+
     student.train()
     for epoch in range(LOCAL_EPOCHS):
         epoch_loss = 0.0
@@ -324,9 +345,10 @@ def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output
                     student_logits, y_batch, teacher_logits,
                     list(student.parameters()), global_params,
                     missing_classes=missing_classes,
-                    lambda_kd=LAMBDA_KD,
-                    mu=MU_PROX, T=KD_TEMP,
-                    lambda_fedcurv=LAMBDA_FEDCURV,
+                    lambda_kd=actual_lambda_kd,
+                    mu=actual_mu_prox,
+                    T=KD_TEMP,
+                    lambda_fedcurv=actual_lambda_fedcurv,
                     other_clients_data=other_clients_data,
                 )
             else:
@@ -424,6 +446,10 @@ def main():
     parser.add_argument("--output-dir",     type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--init-scaler-only", action="store_true",
                         help="Fit and dump local scaler, then exit (used by FederatedClient Step 0)")
+    parser.add_argument("--no-kd", action="store_true", help="Disable Knowledge Distillation")
+    parser.add_argument("--no-fedprox", action="store_true", help="Disable FedProx")
+    parser.add_argument("--no-fedcurv", action="store_true", help="Disable FedCurv")
+    parser.add_argument("--no-freeze", action="store_true", help="Disable Output Neuron Freezing")
     args = parser.parse_args()
 
     print("=" * 65)
@@ -441,7 +467,8 @@ def main():
 
     print("\n[Step 3] Training PyTorch MLP...")
     model, scaler, le, feature_names, class_counts, acc = train(
-        df, args.node_id, args.init_scaler_only, args.output_dir
+        df, args.node_id, args.init_scaler_only, args.output_dir,
+        no_kd=args.no_kd, no_fedprox=args.no_fedprox, no_fedcurv=args.no_fedcurv, no_freeze=args.no_freeze
     )
 
     if args.init_scaler_only:
