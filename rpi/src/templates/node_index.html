@@ -452,20 +452,11 @@
         "FloodingExperiment":        "Flooding",
         "PacketLossExperiment":      "Packet Loss",
         "DuplicatePacketExperiment": "Duplicate Packet",
-        "DelayExperiment":           "Delay Attack",
-        "ConnectionResetExperiment": "Connection Reset",
-        "DeviceSpoofExperiment":     "Device Spoofing",
-        "DataTamperingExperiment":   "Data Tampering",
-        "PacketInjectionExperiment": "Packet Injection",
-        "ReplayExperiment":          "Replay Attack",
         "SlowDoSExperiment":         "Slow DoS",
         "PacketInjectionMalformedExperiment": "Malformed Injection",
-        "PacketInjectionConformantExperiment": "Conformant Injection",
-        "ReconScanExperiment":       "Reconnaissance Scan",
         "DeviceSpoofHardExperiment": "Hard Device Spoofing",
         "DataTamperingBitFlipExperiment": "BitFlip Tampering",
         "DataTamperingCRCForgedExperiment": "CRC Forged Tampering",
-        "SuspectedDataTampering":    "Suspected Tampering",
         "Physical_Anomaly":          "Physical Anomaly",
     };
 
@@ -618,7 +609,7 @@
         // ── Shared summary card (top-right) ─────────────────────────────
         const cardPred = document.getElementById('card4-pred');
         const isSuspected = lbl === "Normal" && inf.iso_anomaly;
-        cardPred.textContent = isSuspected ? "Suspected Tampering" : displayLbl;
+        cardPred.textContent = isSuspected ? "Physical Anomaly" : displayLbl;
         cardPred.className = (lbl === "Normal" && !inf.iso_anomaly)
             ? "data-value text-normal" : "data-value text-attack";
         document.getElementById('card4-conf').textContent = `${conf}%`;
@@ -650,18 +641,14 @@
         const physExpl     = document.getElementById('phys-explanation');
 
         if (inf.iso_anomaly) {
-            physBanner.textContent = isSuspected ? "SUSPECTED TAMPERING" : "ANOMALY DETECTED";
+            physBanner.textContent = "ANOMALY DETECTED";
             physBanner.className = "text-attack";
             physDetails.style.display = "block";
-            document.getElementById('phys-attack-type').textContent = isSuspected ? "Suspected Data Tampering" : "Physical Anomaly";
+            document.getElementById('phys-attack-type').textContent = "Physical Anomaly";
             document.getElementById('phys-attack-time').textContent = ts;
             physPanel.classList.add('is-attack');
             
-            if (isSuspected) {
-                physExpl.innerHTML = 'Physical anomaly detected but cyber traffic appears normal.<br>Possible causes: <strong style="color:var(--color-warning)">Sophisticated data tampering</strong> or genuine machine fault.';
-            } else {
-                physExpl.innerHTML = 'Physical anomaly detected concurrently with a cyber attack.<br>The physical machine state has been disrupted.';
-            }
+            physExpl.innerHTML = 'Physical anomaly detected.<br>The physical machine state has been disrupted.';
         } else {
             physBanner.textContent = "NORMAL";
             physBanner.className = "text-normal";

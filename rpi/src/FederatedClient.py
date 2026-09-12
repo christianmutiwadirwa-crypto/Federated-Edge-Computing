@@ -9,12 +9,12 @@
  a new batch of labelled experiment data is collected.
 
  Workflow:
-   1. Subprocesses `train_fused_model.py` to train a local MLP on the 
+   1. Subprocesses `train_federated_node.py` to train a local PyTorch MLP on the 
       node's local `results/` folder.
-   2. Extracts the weights (coefs_, intercepts_) from the resulting model.
-   3. Sends the weights via HTTP POST to the FL Server in Oracle Cloud.
+   2. Extracts the weights (tensors) from the resulting model.
+   3. Sends the weights via HTTP POST to the FL Server in the cloud.
    4. Polls the FL Server until the new aggregated global model is ready.
-   5. Overwrites the local fused_ids_model.pkl with the global weights.
+   5. Overwrites the local fused_ids_model.pth with the global weights.
    6. Restarts the InferenceEngine to hot-reload the new global model.
 =============================================================================
 """
@@ -321,6 +321,11 @@ class FederatedClient:
             local_backup_path = archive_dir / f"fused_ids_model_local_R{round_num}.pth"
             _save_torch(local_model, local_backup_path)
             print(f"     Local model backed up to {local_backup_path.name}")
+            
+            if round_num == 1:
+                baseline_path = MODELS_DIR / "fused_ids_model_baseline.pth"
+                _save_torch(local_model, baseline_path)
+                print("     [!] Initial Round 1 Baseline Model explicitly saved for future comparison.")
 
             # Apply global weights
             _apply_torch(local_model, coefs, intercepts)
@@ -345,16 +350,14 @@ class FederatedClient:
             return False
             
         metrics_json = BASE_DIR / "metrics.json"
-        test_script = BASE_DIR / "network_analysis" / "test_fused_model.py"
+        test_script = BASE_DIR / "network_analysis" / "evaluate_holdout.py"
         
         try:
             subprocess.run(
                 ["python", str(test_script), 
-                 "--model-path", str(MODEL_PATH), 
-                 "--results-dir", str(eval_results_dir), 
-                 "--output-json", str(metrics_json),
-                 "--models-dir", str(MODELS_DIR)],
-                check=True, capture_output=True, text=True
+                 "--model-dir", str(MODELS_DIR), 
+                 "--output-json", str(metrics_json)],
+                check=True
             )
             
             with open(metrics_json, "r") as f:

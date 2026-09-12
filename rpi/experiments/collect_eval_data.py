@@ -52,8 +52,22 @@ def main():
     print(f"[*] Generated temporary config at {eval_config_path}")
     print("[*] Starting experiments...")
     
-    # 4. Run all experiments
-    exp_keys = list(experiments.keys())
+    # Only run the 9 active classes for the final federation
+    active_classes = {
+        "NormalExperiment",
+        "FloodingExperiment",
+        "SlowDoSExperiment",
+        "PacketInjectionMalformedExperiment",
+        "PacketLossExperiment",
+        "DuplicatePacketExperiment",
+        "DeviceSpoofHardExperiment",
+        "DataTamperingBitFlipExperiment",
+        "DataTamperingCRCForgedExperiment"
+    }
+    
+    # 4. Run all active experiments
+    exp_keys = [k for k in experiments.keys() if k in active_classes]
+    
     for i, exp_key in enumerate(exp_keys, 1):
         # We need the base experiment name without 'Experiment' suffix 
         # (e.g. 'ReplayExperiment' -> 'Replay' as expected by main.py arg)

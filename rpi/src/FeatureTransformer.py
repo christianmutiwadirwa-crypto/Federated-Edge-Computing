@@ -4,8 +4,8 @@
  Shared feature engineering utility for the Federated IDS pipeline.
 =============================================================================
  This module is the single source of truth for all feature engineering
- logic. Both the training pipeline (train_fused_model.py) and the
- real-time InferenceEngine import this class to guarantee that the exact
+ logic. Both the training pipeline (`train_federated_node.py`) and the
+ realtime `InferenceEngine.py` use this same class to guarantee that the exact
  same transformations are applied at training time and at inference time.
 
  Prevents training/serving skew — a silent bug where the model is trained

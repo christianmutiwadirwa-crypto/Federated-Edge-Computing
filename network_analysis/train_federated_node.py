@@ -83,12 +83,12 @@ GLOBAL_CLASSES = {
 NODE_CLASSES = {
     "edge_node_1": [
         "Normal",
-        "FloodingExperiment",
         "SlowDoSExperiment",
         "PacketLossExperiment",
         "PacketInjectionMalformedExperiment",
         "DataTamperingBitFlipExperiment",
-        "DuplicatePacketExperiment"
+        "DuplicatePacketExperiment",
+        "DataTamperingCRCForgedExperiment"
     ],
     "edge_node_2": [
         "Normal",

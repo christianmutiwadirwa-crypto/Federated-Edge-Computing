@@ -50,12 +50,25 @@ def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
     from train_federated_node import DROPPED_CLASSES
     if DROPPED_CLASSES:
         master = master[~master["AttackLabel"].isin(DROPPED_CLASSES)].reset_index(drop=True)
+        
+    # Downsample massive classes to ensure the evaluation metrics and confusion matrix are balanced
+    MAX_SAMPLES_PER_CLASS = 350
+    master = master.groupby("AttackLabel", group_keys=False).apply(lambda x: x.sample(min(len(x), MAX_SAMPLES_PER_CLASS), random_state=42)).reset_index(drop=True)
+    
     return master
 
+import argparse
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-dir", type=str, default="models", help="Directory containing the model to evaluate")
+    parser.add_argument("--model-name", type=str, default="fused_ids_model.pth", help="Filename of the model checkpoint")
+    parser.add_argument("--output-json", type=str, default=None, help="Optional JSON file to save metrics to")
+    args = parser.parse_args()
+
     base_dir = Path(__file__).resolve().parent.parent
     eval_dir = base_dir / "rpi" / "experiments" / "results" / "evaluation"
-    models_dir = base_dir / "models"
+    models_dir = base_dir / args.model_dir
     
     print(f"Loading holdout dataset from {eval_dir}...")
     df = load_cyber_only_dataset(eval_dir)
@@ -82,8 +95,8 @@ def main():
     X_scaled = scaler.transform(X)
     X_scaled = np.nan_to_num(X_scaled, nan=0.0, posinf=0.0, neginf=0.0)
     
-    print(f"Loading PyTorch model...")
-    model = load_model(models_dir / "fused_ids_model.pth")
+    print(f"Loading PyTorch model: {args.model_name}...")
+    model = load_model(models_dir / args.model_name)
     model.eval()
     
     with torch.no_grad():
@@ -98,12 +111,17 @@ def main():
     target_names = label_encoder.inverse_transform(labels_present)
     print(classification_report(y_encoded, preds, labels=labels_present, target_names=target_names))
     
-    print("Confusion Matrix:")
+    print("\nConfusion Matrix:")
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 1000)
     labels = label_encoder.inverse_transform(np.unique(y_encoded))
     cm = pd.DataFrame(confusion_matrix(y_encoded, preds, labels=labels_present), index=target_names, columns=target_names)
     print(cm)
-
+    
+    if args.output_json:
+        import json
+        with open(args.output_json, "w") as f:
+            json.dump({"accuracy": float(acc), "samples": int(len(y_encoded))}, f)
+            
 if __name__ == "__main__":
     main()

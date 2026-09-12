@@ -5,6 +5,7 @@ __pycache__/
 Node2_Package.zip
 archive/
 models/
+models_*/
 rpi/experiments/results/
 rpi/experiments/logs/
 rpi/experiments/captures/

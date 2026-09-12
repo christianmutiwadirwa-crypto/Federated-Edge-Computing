@@ -101,7 +101,6 @@ class InferenceEngine(threading.Thread):
         Silently sets _model_ready=False if any artifact is missing.
         """
         required = {
-            "fused_ids_model.pkl":  "_model",
             "scaler.pkl":           "_scaler",
             "label_encoder.pkl":    "_label_encoder",
             "feature_columns.pkl":  "_feature_columns",
@@ -117,18 +116,36 @@ class InferenceEngine(threading.Thread):
                     return
                 setattr(self, attr, joblib.load(path))
 
+            # --- PyTorch Model Loading ---
+            import sys
+            import torch
+            network_analysis_dir = self._models_dir.parent / "network_analysis"
+            if str(network_analysis_dir) not in sys.path:
+                sys.path.insert(0, str(network_analysis_dir))
+            from mlp_torch import load_model
+
+            model_path = self._models_dir / "fused_ids_model.pth"
+            if not model_path.exists():
+                self._log(f"[InferenceEngine] Missing PyTorch artifact: {model_path}. Inference disabled.", level="warning")
+                self._model_ready = False
+                return
+            
+            self._model = load_model(model_path)
+            self._model.eval()
+
             self._model_ready = True
             self._log(
-                f"[InferenceEngine] Model loaded. "
+                f"[InferenceEngine] PyTorch Model loaded. "
                 f"Classes: {list(self._label_encoder.classes_)} | "
                 f"Features: {len(self._feature_columns)}"
             )
             
             # --- Shadow Testing ---
-            local_model_path = self._models_dir / "fused_ids_model_local.pkl"
+            local_model_path = self._models_dir / "fused_ids_model_local.pth"
             if local_model_path.exists():
-                self._local_model = joblib.load(local_model_path)
-                self._log("[InferenceEngine] Shadow model (local baseline) loaded for A/B testing.")
+                self._local_model = load_model(local_model_path)
+                self._local_model.eval()
+                self._log("[InferenceEngine] Shadow model (local PyTorch baseline) loaded for A/B testing.")
             else:
                 self._local_model = None
 
@@ -232,7 +249,7 @@ class InferenceEngine(threading.Thread):
                     iso_anomaly_detected = True
                     # Note: do NOT alert here yet — wait for cyber verdict below.
                     # If cyber also flags an attack, the cyber label takes priority.
-                    # If cyber says Normal, we raise SuspectedDataTampering.
+                    # If cyber says Normal, we raise Physical_Anomaly.
 
         with self._lock:
             # Apply feature engineering (diffs + metadata strip)
@@ -275,16 +292,25 @@ class InferenceEngine(threading.Thread):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", UserWarning)
             scaled = self._scaler.transform(feature_df)
-        proba  = self._model.predict_proba(scaled)[0]
+            
+        import torch
+        tensor_input = torch.tensor(scaled, dtype=torch.float32)
+        
+        with torch.no_grad():
+            logits = self._model(tensor_input)
+            proba = torch.softmax(logits, dim=1).numpy()[0]
+            
         pred_idx   = int(np.argmax(proba))
         confidence = float(proba[pred_idx])
         label      = self._label_encoder.classes_[pred_idx]
         
         # --- Shadow Testing Comparison ---
         if self._local_model is not None:
-            local_proba = self._local_model.predict_proba(scaled)[0]
-            local_pred_idx = int(np.argmax(local_proba))
-            local_label = self._label_encoder.classes_[local_pred_idx]
+            with torch.no_grad():
+                local_logits = self._local_model(tensor_input)
+                local_proba = torch.softmax(local_logits, dim=1).numpy()[0]
+                local_pred_idx = int(np.argmax(local_proba))
+                local_label = self._label_encoder.classes_[local_pred_idx]
             
             if local_label != label:
                 self._log(f"[ShadowTest] Disagreement! Local predicted {local_label}, Global predicted {label}", level="warning")
@@ -300,12 +326,20 @@ class InferenceEngine(threading.Thread):
                 window_timestamp=ts,
                 node_id=node_id,
             )
+        elif node_id not in [1, 2]:
+            # --- THE HYBRID OVERRIDE ---
+            # The ML model thinks the flow is Normal, but the physical identity is spoofed/corrupted.
+            # We deterministically know this is a DataTampering attack that bypassed the ML layer.
+            self._alert_manager.alert(
+                label="DataTamperingCRCForged",
+                confidence=1.0,
+                window_timestamp=ts,
+                node_id=node_id,
+            )
         elif iso_anomaly_detected:
             # Cyber model sees Normal traffic, but physical sensor signals anomaly.
-            # This is the signature of a sophisticated attacker who correctly forged
-            # the CRC/packet structure but cannot fake the physical machine state.
             self._alert_manager.alert(
-                label="SuspectedDataTampering",
+                label="Physical_Anomaly",
                 confidence=1.0,
                 window_timestamp=ts,
                 node_id=node_id,

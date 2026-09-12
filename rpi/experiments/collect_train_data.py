@@ -5,26 +5,21 @@ import subprocess
 import argparse
 from pathlib import Path
 
-# Batch 1 (7 classes)
+# Batch 1 (5 classes)
 BATCH_1 = [
     "NormalExperiment",
-    # "FloodingExperiment",
-   # "SlowDoSExperiment",
-    "PacketInjectionMalformedExperiment",
-    "PacketInjectionConformantExperiment",
-    #"PacketLossExperiment",
-   # "DuplicatePacketExperiment"
+    "FloodingExperiment",
+    "SlowDoSExperiment",
+    "PacketLossExperiment",
+    "DuplicatePacketExperiment"
 ]
 
-# Batch 2 (7 classes)
+# Batch 2 (4 classes)
 BATCH_2 = [
-    "DelayExperiment",
-    "ConnectionResetExperiment",
-    "ReconScanExperiment",
+    "PacketInjectionMalformedExperiment",
     "DeviceSpoofHardExperiment",
     "DataTamperingBitFlipExperiment",
-    "DataTamperingCRCForgedExperiment",
-    "ReplayExperiment"
+    "DataTamperingCRCForgedExperiment"
 ]
 
 def main():

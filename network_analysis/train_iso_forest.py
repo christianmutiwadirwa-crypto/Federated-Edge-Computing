@@ -29,32 +29,16 @@ PHYSICAL_METADATA_COLS = ["Timestamp", "Node ID", "Label"]
 # Pipeline
 # ---------------------------------------------------------------------------
 
-def load_normal_physical_data(results_dir: Path) -> pd.DataFrame:
-    """
-    Load physical_data.csv from all 'Normal' or 'NormalExperiment' results directories.
-    """
-    dfs = []
+def load_normal_physical_data(csv_path: Path) -> pd.DataFrame:
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Physical data not found: {csv_path}")
     
-    # Iterate through all subdirectories in results
-    if not results_dir.exists():
-        raise FileNotFoundError(f"Results directory not found: {results_dir}")
-        
-    for exp_dir in results_dir.iterdir():
-        if exp_dir.is_dir() and (exp_dir.name.startswith("Normal_") or exp_dir.name.startswith("NormalExperiment_")):
-            phys_csv = exp_dir / "physical_data.csv"
-            if phys_csv.exists():
-                try:
-                    df = pd.read_csv(phys_csv)
-                    dfs.append(df)
-                    print(f"  [OK] Loaded {len(df)} physical samples from {exp_dir.name}")
-                except Exception as e:
-                    print(f"  [ERROR] Could not read {phys_csv}: {e}")
-                    
-    if not dfs:
-        raise ValueError("No normal physical data found.")
-        
-    master_df = pd.concat(dfs, ignore_index=True)
-    return master_df
+    try:
+        df = pd.read_csv(csv_path)
+        print(f"  [OK] Loaded {len(df)} physical samples from {csv_path.parent.name}")
+        return df
+    except Exception as e:
+        raise ValueError(f"Could not read {csv_path}: {e}")
 
 def train_isolation_forest(df: pd.DataFrame):
     """
@@ -103,8 +87,8 @@ def save_artifacts(model, scaler, feature_columns, output_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Train Isolation Forest on Normal Physical Data")
-    parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR,
-                        help="Path to the experiments results directory")
+    parser.add_argument("--csv-path", type=Path, required=True,
+                        help="Exact path to the physical_data.csv to train on")
     parser.add_argument("--output-dir",  type=Path, default=DEFAULT_OUTPUT_DIR,
                         help="Directory to save trained model artifacts")
     args = parser.parse_args()
@@ -113,8 +97,8 @@ def main():
     print("  Isolation Forest Training Pipeline (Physical Only)")
     print("=" * 55)
 
-    print(f"\n[1/3] Loading normal physical data from: {args.results_dir}")
-    master_df = load_normal_physical_data(args.results_dir)
+    print(f"\n[1/3] Loading normal physical data from: {args.csv_path}")
+    master_df = load_normal_physical_data(args.csv_path)
 
     print("\n[2/3] Training model...")
     model, scaler, feature_columns = train_isolation_forest(master_df)
