@@ -8,7 +8,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "rpi" / "src"))
 from FeatureTransformer import FeatureTransformer
-from train_node1_8classes_torch import GLOBAL_CLASSES
+from train_federated_node import GLOBAL_CLASSES
 from mlp_torch import load_model
 
 def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
@@ -34,16 +34,22 @@ def load_cyber_only_dataset(results_dir: Path) -> pd.DataFrame:
     other_attacks = master["AttackLabel"].isin([
         "DelayExperiment", "ConnectionResetExperiment", 
         "DuplicatePacketExperiment", "FloodingExperiment", 
-        "DeviceSpoofExperiment", "PacketLossExperiment",
-        "PacketInjectionExperiment", "SlowDoSExperiment"
+        "DeviceSpoofHardExperiment", "PacketLossExperiment",
+        "SlowDoSExperiment", "ReconScanExperiment",
+        "DataTamperingBitFlipExperiment", "DataTamperingCRCForgedExperiment",
+        "ReplayExperiment"
     ])
     clean_masks.append(other_attacks & (master["total_packets"] > 2))
-    final_mask = pd.concat(clean_masks, axis=1).any(axis=1)
-    master = master[final_mask].reset_index(drop=True)
     
-    # Filter to the 9 classes (exclude DataTampering and Replay)
-    allowed = [c for c in GLOBAL_CLASSES.keys() if c not in ("DataTamperingExperiment", "ReplayExperiment")]
-    master = master[master["AttackLabel"].isin(allowed)].reset_index(drop=True)
+    clean_masks.append(master["AttackLabel"].isin([
+        "PacketInjectionMalformedExperiment", 
+        "PacketInjectionConformantExperiment"
+    ]))
+    
+    final_mask = pd.concat(clean_masks, axis=1).any(axis=1)
+    from train_federated_node import DROPPED_CLASSES
+    if DROPPED_CLASSES:
+        master = master[~master["AttackLabel"].isin(DROPPED_CLASSES)].reset_index(drop=True)
     return master
 
 def main():
@@ -88,13 +94,15 @@ def main():
     acc = accuracy_score(y_encoded, preds)
     print(f"\nHoldout Set Accuracy: {acc * 100:.2f}%")
     print("\nClassification Report:")
-    print(classification_report(y_encoded, preds, target_names=label_encoder.inverse_transform(np.unique(y_encoded))))
+    labels_present = np.unique(np.concatenate((y_encoded, preds)))
+    target_names = label_encoder.inverse_transform(labels_present)
+    print(classification_report(y_encoded, preds, labels=labels_present, target_names=target_names))
     
     print("Confusion Matrix:")
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 1000)
     labels = label_encoder.inverse_transform(np.unique(y_encoded))
-    cm = pd.DataFrame(confusion_matrix(y_encoded, preds), index=labels, columns=labels)
+    cm = pd.DataFrame(confusion_matrix(y_encoded, preds, labels=labels_present), index=target_names, columns=target_names)
     print(cm)
 
 if __name__ == "__main__":

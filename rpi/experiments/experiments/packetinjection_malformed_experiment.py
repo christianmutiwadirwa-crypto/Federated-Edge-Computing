@@ -1,60 +1,24 @@
 """
 =============================================================================
- packetinjection_experiment.py
- Structural stub for the PacketInjection cybersecurity experiment.
+ packetinjection_malformed_experiment.py
+ Implementation for the PacketInjection (Malformed) cybersecurity experiment.
 =============================================================================
 """
 
 from core.base_experiment import BaseExperiment
-import math
+import os
 import random
 import socket
 import struct
 import time
 
-_PACKET_FMT = "<HBBIQfffffffffffffffffffffffffff"
+def _build_malformed_packet() -> bytes:
+    # Randomly select a length that is usually NOT 126 to trigger length/parsing errors
+    # or occasionally 126 but with completely random garbage bytes to fail CRC and magic bytes.
+    length = random.choice([random.randint(50, 125), random.randint(127, 200), 126])
+    return os.urandom(length)
 
-def _crc16_ccitt(data: bytes) -> int:
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte << 8
-        for _ in range(8):
-            if crc & 0x8000:
-                crc = (crc << 1) ^ 0x1021
-            else:
-                crc <<= 1
-            crc &= 0xFFFF
-    return crc
-
-def _build_injected_packet(
-    seq: int, node_id: int, ts_ms: int,
-    mean_x: float, mean_y: float, mean_z: float,
-    rms_x: float,  rms_y: float,  rms_z: float,
-    std_x: float,  std_y: float,  std_z: float,
-    max_x: float,  max_y: float,  max_z: float,
-    min_x: float,  min_y: float,  min_z: float,
-    p2p_x: float,  p2p_y: float,  p2p_z: float,
-    skew_x: float, skew_y: float, skew_z: float,
-    kurt_x: float, kurt_y: float, kurt_z: float,
-    crf_x: float,  crf_y: float,  crf_z: float,
-) -> bytes:
-    body = struct.pack(
-        _PACKET_FMT,
-        0xABCD, 1, node_id, seq, ts_ms,
-        mean_x, mean_y, mean_z,
-        rms_x,  rms_y,  rms_z,
-        std_x,  std_y,  std_z,
-        max_x,  max_y,  max_z,
-        min_x,  min_y,  min_z,
-        p2p_x,  p2p_y,  p2p_z,
-        skew_x, skew_y, skew_z,
-        kurt_x, kurt_y, kurt_z,
-        crf_x,  crf_y,  crf_z,
-    )
-    crc = _crc16_ccitt(body)
-    return body + struct.pack("<H", crc)
-
-class PacketInjectionExperiment(BaseExperiment):
+class PacketInjectionMalformedExperiment(BaseExperiment):
     """
     Evaluates the malformed and fabricated packet detection capabilities of the
     cyber intrusion detection system by inserting protocol packets that were not
@@ -151,26 +115,11 @@ class PacketInjectionExperiment(BaseExperiment):
             kurt_y = random.uniform(3.0, 6.0)
             kurt_z = random.uniform(3.0, 6.0)
 
-            crf_x  = max_x / rms_x if rms_x > 0 else 1.0
-            crf_y  = max_y / rms_y if rms_y > 0 else 1.0
-            crf_z  = max_z / rms_z if rms_z > 0 else 1.0
-
-            pkt = _build_injected_packet(
-                seq=i, node_id=self.node_id,
-                ts_ms=int(time.time() * 1000),
-                mean_x=mean_x,  mean_y=mean_y,  mean_z=mean_z,
-                rms_x=rms_x,    rms_y=rms_y,    rms_z=rms_z,
-                std_x=std_x,    std_y=std_y,    std_z=std_z,
-                max_x=max_x,    max_y=max_y,    max_z=max_z,
-                min_x=min_x,    min_y=min_y,    min_z=min_z,
-                p2p_x=p2p_x,    p2p_y=p2p_y,    p2p_z=p2p_z,
-                skew_x=skew_x,  skew_y=skew_y,  skew_z=skew_z,
-                kurt_x=kurt_x,  kurt_y=kurt_y,  kurt_z=kurt_z,
-                crf_x=crf_x,    crf_y=crf_y,    crf_z=crf_z,
-            )
+            # Generate a completely malformed packet
+            payload = _build_malformed_packet()
 
             try:
-                self.sock.sendall(pkt)
+                self.sock.sendall(payload)
                 self.sock.setblocking(False)
                 try:
                     self.sock.recv(1)
@@ -180,7 +129,7 @@ class PacketInjectionExperiment(BaseExperiment):
                 self.sent += 1
             except Exception as e:
                 self.errors += 1
-                self.logger.error(f"  [{self.name}] Send error on packet #{i + 1}: {e}")
+                self.logger.error(f"[{self.name}] Failed to send malformed packet: {e}")
 
             time.sleep(interval_sec)
             i += 1
@@ -195,5 +144,5 @@ class PacketInjectionExperiment(BaseExperiment):
         if self.sock:
             self.sock.close()
         self._clear_attacker_flows()
-        self.logger.info(f"[{self.name}] Injection complete: {self.sent} packets sent, {self.errors} errors.")
+        self.logger.info(f"[{self.name}] Malformed Packet Injection complete. Sent: {self.sent}, Errors: {self.errors}")
         self._log_cleaned_up()

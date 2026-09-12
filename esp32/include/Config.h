@@ -33,7 +33,7 @@ constexpr uint32_t WIFI_RECONNECT_DELAY_MS  = 5000;
 // ---------------------------------------------------------------------------
 // TCP Server (Raspberry Pi)
 // ---------------------------------------------------------------------------
-constexpr char     SERVER_IP[]      = "10.54.75.1";
+constexpr char     SERVER_IP[]      = "10.85.187.16";
 constexpr uint16_t SERVER_PORT      = 9000;
 
 /// How long to wait for a TCP connection to be established (ms).

@@ -80,7 +80,7 @@ class CyberFeatureExtractor:
         window_end: float,
         packets: List[PacketEntry],
         reconnection_count: int,
-        attack_label: str,
+        attack_label: str = "Normal",
     ) -> dict:
         """
         Compute the complete 44-feature cyber vector for one observation window.

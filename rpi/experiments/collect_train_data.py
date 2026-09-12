@@ -8,12 +8,12 @@ from pathlib import Path
 # Batch 1 (7 classes)
 BATCH_1 = [
     "NormalExperiment",
-    "FloodingExperiment",
-    "SlowDoSExperiment",
+    # "FloodingExperiment",
+   # "SlowDoSExperiment",
     "PacketInjectionMalformedExperiment",
     "PacketInjectionConformantExperiment",
-    "PacketLossExperiment",
-    "DuplicatePacketExperiment"
+    #"PacketLossExperiment",
+   # "DuplicatePacketExperiment"
 ]
 
 # Batch 2 (7 classes)

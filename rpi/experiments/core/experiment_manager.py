@@ -5,6 +5,7 @@ import time
 from core.logger import Logger
 from core.config_manager import ConfigManager
 from core.dataset_sync import DatasetSynchronizer
+from core.label_manager import LabelManager
 from core.base_experiment import BaseExperiment
 
 class ExperimentManager:
@@ -18,6 +19,7 @@ class ExperimentManager:
         self.config_manager = config_manager
         self.logger = logger
         self.dataset_sync = DatasetSynchronizer(config_manager.config, logger)
+        self.label_manager = LabelManager(config_manager.config, logger)
 
     # Registry of all available experiment names → their module and class names.
     # Add new experiments here when a new experiment module is created.
@@ -25,13 +27,18 @@ class ExperimentManager:
         "Replay":           ("experiments.replay_experiment",           "ReplayExperiment"),
         "Flooding":         ("experiments.flooding_experiment",         "FloodingExperiment"),
         "SlowDoS":          ("experiments.slowdos_experiment",          "SlowDoSExperiment"),
-        "PacketInjection":  ("experiments.packetinjection_experiment",  "PacketInjectionExperiment"),
+        "PacketInjectionMalformed":  ("experiments.packetinjection_malformed_experiment",  "PacketInjectionMalformedExperiment"),
+        "PacketInjectionConformant": ("experiments.packetinjection_conformant_experiment", "PacketInjectionConformantExperiment"),
         "PacketLoss":       ("experiments.packetloss_experiment",       "PacketLossExperiment"),
         "DuplicatePacket":  ("experiments.duplicatepacket_experiment",  "DuplicatePacketExperiment"),
         "Delay":            ("experiments.delay_experiment",            "DelayExperiment"),
         "ConnectionReset":  ("experiments.connectionreset_experiment",  "ConnectionResetExperiment"),
+        "ReconScan":        ("experiments.reconscan_experiment",        "ReconScanExperiment"),
         "DeviceSpoof":      ("experiments.devicespoof_experiment",      "DeviceSpoofExperiment"),
+        "DeviceSpoofHard":  ("experiments.devicespoof_hard_experiment", "DeviceSpoofHardExperiment"),
         "DataTampering":    ("experiments.datatampering_experiment",    "DataTamperingExperiment"),
+        "DataTamperingBitFlip":      ("experiments.datatampering_bitflip_experiment",      "DataTamperingBitFlipExperiment"),
+        "DataTamperingCRCForged":    ("experiments.datatampering_crcforged_experiment",    "DataTamperingCRCForgedExperiment"),
         "TrueDataTampering":("experiments.truedatatampering_experiment","TrueDataTamperingExperiment"),
         "Normal":           ("experiments.normal_experiment",           "NormalExperiment"),
     }
@@ -92,6 +99,7 @@ class ExperimentManager:
         try:
             # 3. Mark Dataset Start
             self.dataset_sync.mark_start()
+            self.label_manager.set_label(experiment_instance.name)
             
             # 4. Initialization
             self.logger.info(f"[{experiment_instance.name}] Initializing...")
@@ -108,6 +116,7 @@ class ExperimentManager:
             # 7. Cleanup
             self.logger.info(f"[{experiment_instance.name}] Cleaning up...")
             try:
+                self.label_manager.reset()
                 experiment_instance.cleanup()
             except Exception as e:
                 self.logger.error(f"[{experiment_instance.name}] Cleanup failed: {e}")

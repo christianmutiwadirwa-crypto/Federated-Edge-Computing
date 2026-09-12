@@ -571,7 +571,7 @@ async def detailed_status():
             "expected_clients": EXPECTED_CLIENTS,
             "algorithm": "FedAvg",
             "model_type": "MLP Classifier (sklearn)",
-            "task": "9-class Cyber Intrusion Detection",
+            "task": "14-class Cyber Intrusion Detection",
             "deployment": "Oracle Cloud / Render",
         },
         "current_round": round_number,

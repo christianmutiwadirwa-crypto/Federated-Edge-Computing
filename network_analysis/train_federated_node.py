@@ -67,7 +67,7 @@ MU_PROX       = 0.01       # FedProx proximal weight
 KD_TEMP       = 3.0        # Knowledge distillation temperature
 LAMBDA_FEDCURV = 1.0       # FedCurv Fisher-weighted penalty
 
-# Global 14-class schema — output layer fixed at 14 neurons for FL compatibility
+# Global 10-class schema — output layer fixed at 10 neurons for FL compatibility
 GLOBAL_CLASSES = {
     "Normal":                              0,
     "FloodingExperiment":                  1,
@@ -76,44 +76,34 @@ GLOBAL_CLASSES = {
     "PacketInjectionConformantExperiment": 4,
     "PacketLossExperiment":                5,
     "DuplicatePacketExperiment":           6,
-    "DelayExperiment":                     7,
-    "ConnectionResetExperiment":           8,
-    "ReconScanExperiment":                 9,
-    "DeviceSpoofHardExperiment":           10,
-    "DataTamperingBitFlipExperiment":      11,
-    "DataTamperingCRCForgedExperiment":    12,
-    "ReplayExperiment":                    13,
+    "DeviceSpoofHardExperiment":           7,
+    "DataTamperingBitFlipExperiment":      8,
+    "DataTamperingCRCForgedExperiment":    9,
 }
 
 NODE_CLASSES = {
     "edge_node_1": [
         "Normal",
         "FloodingExperiment",
-        "PacketInjectionMalformedExperiment",
+        "SlowDoSExperiment",
         "PacketLossExperiment",
-        "DuplicatePacketExperiment",
-        "DelayExperiment",
-        "ConnectionResetExperiment",
-        "DeviceSpoofHardExperiment",
+        "PacketInjectionMalformedExperiment",
         "DataTamperingBitFlipExperiment",
-        "ReplayExperiment"
+        "DuplicatePacketExperiment"
     ],
     "edge_node_2": [
         "Normal",
         "FloodingExperiment",
         "SlowDoSExperiment",
-        "PacketInjectionConformantExperiment",
         "PacketLossExperiment",
-        "DuplicatePacketExperiment",
-        "ReconScanExperiment",
-        "DeviceSpoofHardExperiment",
+        "PacketInjectionConformantExperiment",
         "DataTamperingCRCForgedExperiment",
-        "ReplayExperiment"
+        "DeviceSpoofHardExperiment"
     ]
 }
 
-# No classes are dropped in the expanded 14-class schema
-DROPPED_CLASSES = set()
+# Classes dropped to fix feature collisions and balance the architecture
+DROPPED_CLASSES = {"DelayExperiment", "ConnectionResetExperiment"}
 
 # ---------------------------------------------------------------------------
 # Step 1: Load Dataset
@@ -275,7 +265,7 @@ def train(df: pd.DataFrame, node_id: str, init_scaler_only: bool = False, output
         student = load_model(model_pth)
     else:
         print("\n  No global model found — initialising new PyTorch MLP from scratch...")
-        student = FederatedMLP(input_dim=input_dim, hidden_sizes=(100, 50), num_classes=9)
+        student = FederatedMLP(input_dim=input_dim, hidden_sizes=(100, 50), num_classes=len(GLOBAL_CLASSES))
 
     # Build teacher — a frozen copy of the global model for knowledge distillation
     if model_pth.exists():
@@ -481,7 +471,7 @@ def main():
     print("\n" + "=" * 65)
     print(f" Training Complete! Final accuracy: {acc * 100:.2f}%")
     print(f" Model type: Class-Aware PyTorch MLP (frozen output neurons for unseen classes)")
-    print(f" Compatible with FL server (9-neuron output layer)")
+    print(f" Compatible with FL server ({len(GLOBAL_CLASSES)}-neuron output layer)")
     print("=" * 65)
 
 
