@@ -67,18 +67,17 @@ MU_PROX       = 0.01       # FedProx proximal weight
 KD_TEMP       = 3.0        # Knowledge distillation temperature
 LAMBDA_FEDCURV = 1.0       # FedCurv Fisher-weighted penalty
 
-# Global 10-class schema — output layer fixed at 10 neurons for FL compatibility
+# Global 9-class schema — output layer fixed at 9 neurons for FL compatibility
 GLOBAL_CLASSES = {
     "Normal":                              0,
     "FloodingExperiment":                  1,
     "SlowDoSExperiment":                   2,
     "PacketInjectionMalformedExperiment":  3,
-    "PacketInjectionConformantExperiment": 4,
-    "PacketLossExperiment":                5,
-    "DuplicatePacketExperiment":           6,
-    "DeviceSpoofHardExperiment":           7,
-    "DataTamperingBitFlipExperiment":      8,
-    "DataTamperingCRCForgedExperiment":    9,
+    "PacketLossExperiment":                4,
+    "DuplicatePacketExperiment":           5,
+    "DeviceSpoofHardExperiment":           6,
+    "DataTamperingBitFlipExperiment":      7,
+    "DataTamperingCRCForgedExperiment":    8,
 }
 
 NODE_CLASSES = {
@@ -96,14 +95,13 @@ NODE_CLASSES = {
         "FloodingExperiment",
         "SlowDoSExperiment",
         "PacketLossExperiment",
-        "PacketInjectionConformantExperiment",
         "DataTamperingCRCForgedExperiment",
         "DeviceSpoofHardExperiment"
     ]
 }
 
-# Classes dropped to fix feature collisions and balance the architecture
-DROPPED_CLASSES = {"DelayExperiment", "ConnectionResetExperiment"}
+# Classes dropped to fix feature collisions, balance architecture, and remove empty classes
+DROPPED_CLASSES = {"DelayExperiment", "ConnectionResetExperiment", "ReconScanExperiment", "ReplayExperiment", "PacketInjectionConformantExperiment"}
 
 # ---------------------------------------------------------------------------
 # Step 1: Load Dataset
